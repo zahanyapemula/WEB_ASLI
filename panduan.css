@@ -1,0 +1,1207 @@
+/* =====================================================
+   RESET
+===================================================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+
+html {
+    width: 100%;
+}
+
+
+body {
+
+    width: 100%;
+
+    min-height: 100vh;
+
+    margin: 0;
+
+    font-family:
+        "Poppins",
+        sans-serif;
+
+    background: #ffffff;
+
+    color: #111111;
+
+    overflow-x: hidden;
+}
+
+
+a {
+    text-decoration: none;
+
+    color: inherit;
+}
+
+
+button {
+    font-family: inherit;
+}
+
+
+/* =====================================================
+   VARIABLES
+===================================================== */
+
+:root {
+
+    --green: #69c347;
+
+    --green-dark: #5db53b;
+
+    --bright-green: #91f33a;
+
+    --light-green: #d2ff91;
+
+    --yellow: #fff22b;
+
+    --border: #dedede;
+
+}
+
+
+/* =====================================================
+   PAGE
+===================================================== */
+
+.page {
+
+    width: 100%;
+
+    min-height: 100vh;
+
+    position: relative;
+
+    overflow: hidden;
+
+    background: #ffffff;
+}
+
+
+/* =====================================================
+   NAVBAR
+===================================================== */
+
+.navbar {
+
+    width: 100%;
+
+    height: 57px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding:
+
+        0
+        clamp(18px, 4vw, 35px);
+
+    position: relative;
+
+    z-index: 50;
+}
+
+
+/* =====================================================
+   LOGO
+===================================================== */
+
+.logo {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    color: #6cc42d;
+
+    font-size: 14px;
+
+    font-weight: 800;
+
+    white-space: nowrap;
+}
+
+
+.logo-icon {
+
+    font-size: 17px;
+
+    line-height: 1;
+}
+
+
+/* =====================================================
+   DESKTOP NAV
+===================================================== */
+
+.desktop-nav {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: clamp(14px, 2.4vw, 26px);
+
+    margin-left: auto;
+
+    margin-right: 18px;
+}
+
+
+.desktop-nav a {
+
+    position: relative;
+
+    padding: 4px 0;
+
+    font-size: 8px;
+
+    font-weight: 500;
+
+    white-space: nowrap;
+}
+
+
+.desktop-nav a:hover {
+
+    color: var(--green);
+}
+
+
+.desktop-nav a.active {
+
+    color: var(--green);
+}
+
+
+.desktop-nav a.active::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+
+    right: 0;
+
+    bottom: 0;
+
+    height: 1px;
+
+    background: var(--green);
+}
+
+
+/* =====================================================
+   LOGIN
+===================================================== */
+
+.login-button {
+
+    padding:
+
+        5px
+        13px;
+
+    background: var(--green);
+
+    color: white;
+
+    border-radius: 7px;
+
+    font-size: 8px;
+
+    font-weight: 700;
+
+    white-space: nowrap;
+
+    transition: .2s ease;
+}
+
+
+.login-button:hover {
+
+    background:
+        var(--green-dark);
+
+    transform:
+        translateY(-1px);
+}
+
+
+/* =====================================================
+   HAMBURGER
+===================================================== */
+
+.hamburger {
+
+    display: none;
+
+    margin-left: auto;
+
+    border: none;
+
+    background: transparent;
+
+    font-size: 22px;
+
+    cursor: pointer;
+}
+
+
+/* =====================================================
+   MOBILE NAV
+===================================================== */
+
+.mobile-nav {
+
+    display: none;
+}
+
+
+/* =====================================================
+   CONTENT
+===================================================== */
+
+.content {
+
+    width: 100%;
+
+    position: relative;
+
+    z-index: 10;
+
+    padding:
+
+        0
+        clamp(15px, 4vw, 40px)
+        100px;
+}
+
+
+/* =====================================================
+   GUIDE HEADER
+===================================================== */
+
+.guide-header {
+
+    text-align: center;
+
+    margin-top: 7px;
+}
+
+
+/* =====================================================
+   BOOK ICON
+===================================================== */
+
+.book-icon {
+
+    width: 28px;
+
+    height: 28px;
+
+    margin:
+
+        0
+        auto
+        5px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 25px;
+
+    color: var(--green);
+}
+
+
+/* =====================================================
+   TITLE
+===================================================== */
+
+.guide-header h1 {
+
+    font-size:
+        clamp(27px, 4vw, 38px);
+
+    font-weight: 800;
+
+    line-height: 1.15;
+}
+
+
+.guide-header h1 span {
+
+    color:
+        var(--bright-green);
+}
+
+
+/* =====================================================
+   SUBTITLE
+===================================================== */
+
+.guide-header p {
+
+    margin-top: 7px;
+
+    font-size:
+        clamp(8px, 1vw, 10px);
+
+    line-height: 1.45;
+
+    color: #222;
+}
+
+
+/* =====================================================
+   GUIDE SECTION
+===================================================== */
+
+.guide-section {
+
+    width: 100%;
+
+    display: flex;
+
+    justify-content: center;
+
+    margin-top: 16px;
+
+    position: relative;
+
+    z-index: 20;
+}
+
+
+/* =====================================================
+   GUIDE CARD
+===================================================== */
+
+.guide-card {
+
+    width: min(100%, 625px);
+
+    min-height: 225px;
+
+    padding: 14px 10px;
+
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1fr;
+
+    gap: 7px;
+
+    background: white;
+
+    border:
+
+        1px solid
+        var(--border);
+
+    border-radius: 13px;
+
+    position: relative;
+
+    z-index: 30;
+
+    box-shadow:
+        0 1px 1px rgba(0,0,0,.02);
+}
+
+
+/* =====================================================
+   PNG IMAGE
+===================================================== */
+
+.guide-image {
+
+    width: 100%;
+
+    height: 197px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    overflow: hidden;
+
+    border-radius: 5px;
+
+    background: #fafafa;
+}
+
+
+.guide-image img {
+
+    width: 100%;
+
+    height: 100%;
+
+    object-fit: contain;
+
+    display: block;
+}
+
+
+/* =====================================================
+   GUIDE INFO
+===================================================== */
+
+.guide-info {
+
+    padding:
+
+        2px
+        0
+        0
+        0;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: flex-start;
+}
+
+
+/* =====================================================
+   LABEL
+===================================================== */
+
+.guide-label {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    padding:
+
+        4px
+        8px;
+
+    border-radius: 5px;
+
+    background:
+        var(--green);
+
+    color: white;
+
+    font-size: 7px;
+
+    font-weight: 600;
+}
+
+
+.guide-label span {
+
+    font-size: 8px;
+}
+
+
+/* =====================================================
+   TITLE
+===================================================== */
+
+.guide-info h2 {
+
+    margin-top: 7px;
+
+    font-size: 15px;
+
+    line-height: 1.25;
+
+    font-weight: 800;
+}
+
+
+/* =====================================================
+   DESCRIPTION
+===================================================== */
+
+.guide-info > p {
+
+    margin-top: 5px;
+
+    font-size: 8px;
+
+    line-height: 1.75;
+
+    color: #222;
+}
+
+
+/* =====================================================
+   USER
+===================================================== */
+
+.guide-user {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    margin-top: 8px;
+
+    font-size: 6.5px;
+
+    color: #333;
+}
+
+
+.user-icon {
+
+    width: 17px;
+
+    height: 17px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background:
+        #5cae3c;
+
+    color: white;
+
+    font-size: 10px;
+}
+
+
+/* =====================================================
+   READ BUTTON
+===================================================== */
+
+.read-button {
+
+    margin-top: 9px;
+
+    padding:
+
+        6px
+        9px;
+
+    border: none;
+
+    border-radius: 6px;
+
+    background:
+        var(--green);
+
+    color: white;
+
+    font-size: 7px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    transition: .2s ease;
+}
+
+
+.read-button span {
+
+    font-size: 8px;
+}
+
+
+.read-button b {
+
+    font-size: 10px;
+
+    line-height: 1;
+}
+
+
+.read-button:hover {
+
+    background:
+        var(--green-dark);
+
+    transform:
+        translateY(-1px);
+}
+
+
+/* =====================================================
+   GREEN BACKGROUND
+===================================================== */
+
+.bottom-green {
+
+    position: absolute;
+
+    left: 0;
+
+    right: 0;
+
+    bottom: 0;
+
+    height: 230px;
+
+    overflow: hidden;
+
+    z-index: 1;
+
+    pointer-events: none;
+}
+
+
+/* =====================================================
+   LEFT WAVE
+===================================================== */
+
+.green-left {
+
+    position: absolute;
+
+    left: -15%;
+
+    bottom: -80px;
+
+    width: 65%;
+
+    height: 175px;
+
+    background:
+        var(--light-green);
+
+    border-radius:
+        60% 55% 0 0;
+
+    transform:
+        rotate(5deg);
+}
+
+
+.green-left::before {
+
+    content: "";
+
+    position: absolute;
+
+    width: 280px;
+
+    height: 150px;
+
+    left: 17%;
+
+    top: -105px;
+
+    background: white;
+
+    border-radius: 50%;
+}
+
+
+/* =====================================================
+   RIGHT WAVE
+===================================================== */
+
+.green-right {
+
+    position: absolute;
+
+    right: -8%;
+
+    bottom: -60px;
+
+    width: 42%;
+
+    height: 145px;
+
+    background:
+        var(--light-green);
+
+    border-radius:
+        80% 0 0 0;
+}
+
+
+.green-right::before {
+
+    content: "";
+
+    position: absolute;
+
+    width: 150px;
+
+    height: 90px;
+
+    left: -35px;
+
+    top: -48px;
+
+    background: white;
+
+    border-radius:
+        70% 70% 0 0;
+}
+
+
+/* =====================================================
+   LAPTOP
+===================================================== */
+
+@media (min-width: 1000px) {
+
+    .guide-card {
+
+        width: 625px;
+
+        min-height: 225px;
+    }
+
+
+    .guide-image {
+
+        height: 197px;
+    }
+
+}
+
+
+/* =====================================================
+   TABLET
+===================================================== */
+
+@media (max-width: 800px) {
+
+    .desktop-nav {
+
+        gap: 12px;
+
+        margin-right: 12px;
+    }
+
+
+    .desktop-nav a {
+
+        font-size: 7.5px;
+    }
+
+
+    .guide-card {
+
+        max-width: 600px;
+    }
+
+}
+
+
+/* =====================================================
+   MOBILE
+===================================================== */
+
+@media (max-width: 600px) {
+
+
+    /* NAVBAR */
+
+    .navbar {
+
+        height: 55px;
+
+        padding:
+
+            0
+            17px;
+    }
+
+
+    .logo {
+
+        font-size: 14px;
+    }
+
+
+    .desktop-nav,
+    .login-button {
+
+        display: none;
+    }
+
+
+    .hamburger {
+
+        display: block;
+    }
+
+
+    /* MOBILE MENU */
+
+    .mobile-nav {
+
+        position: absolute;
+
+        top: 55px;
+
+        left: 15px;
+
+        right: 15px;
+
+        padding: 7px;
+
+        background: white;
+
+        border:
+            1px solid
+            #e4e4e4;
+
+        border-radius: 10px;
+
+        box-shadow:
+            0 8px 20px
+            rgba(0,0,0,.1);
+
+        z-index: 100;
+    }
+
+
+    .mobile-nav.show {
+
+        display: flex;
+
+        flex-direction: column;
+    }
+
+
+    .mobile-nav a {
+
+        padding:
+            10px 12px;
+
+        border-radius: 6px;
+
+        font-size: 10px;
+    }
+
+
+    .mobile-nav a.active,
+    .mobile-nav a:hover {
+
+        color:
+            var(--green);
+
+        background:
+            #f0fce8;
+    }
+
+
+    /* CONTENT */
+
+    .content {
+
+        padding:
+
+            0
+            13px
+            65px;
+    }
+
+
+    /* HEADER */
+
+    .guide-header {
+
+        margin-top: 8px;
+    }
+
+
+    .book-icon {
+
+        font-size: 23px;
+
+        margin-bottom: 5px;
+    }
+
+
+    .guide-header h1 {
+
+        font-size: 25px;
+
+        line-height: 1.2;
+
+        padding:
+            0 5px;
+    }
+
+
+    .guide-header p {
+
+        font-size: 7.5px;
+
+        padding:
+            0 20px;
+
+        margin-top: 7px;
+    }
+
+
+    .desktop-only {
+
+        display: none;
+    }
+
+
+    /* CARD */
+
+    .guide-section {
+
+        margin-top: 15px;
+    }
+
+
+    .guide-card {
+
+        width: 100%;
+
+        min-height: 205px;
+
+        padding: 9px;
+
+        grid-template-columns:
+            1fr
+            1fr;
+
+        gap: 7px;
+
+        border-radius: 12px;
+    }
+
+
+    /* IMAGE */
+
+    .guide-image {
+
+        height: 185px;
+
+        border-radius: 5px;
+    }
+
+
+    /* INFO */
+
+    .guide-info {
+
+        padding:
+            2px
+            0;
+    }
+
+
+    .guide-label {
+
+        font-size: 6px;
+
+        padding:
+            4px 6px;
+    }
+
+
+    .guide-info h2 {
+
+        margin-top: 6px;
+
+        font-size: 12px;
+
+        line-height: 1.25;
+    }
+
+
+    .guide-info > p {
+
+        margin-top: 5px;
+
+        font-size: 6.5px;
+
+        line-height: 1.7;
+    }
+
+
+    .guide-user {
+
+        margin-top: 7px;
+
+        font-size: 5.5px;
+    }
+
+
+    .user-icon {
+
+        width: 15px;
+
+        height: 15px;
+
+        font-size: 8px;
+    }
+
+
+    .read-button {
+
+        margin-top: 7px;
+
+        padding:
+            5px 7px;
+
+        font-size: 6px;
+    }
+
+
+    /* GREEN */
+
+    .bottom-green {
+
+        height: 205px;
+    }
+
+
+    .green-left {
+
+        width: 90%;
+
+        left: -25%;
+
+        height: 155px;
+
+        bottom: -75px;
+    }
+
+
+    .green-right {
+
+        width: 55%;
+
+        right: -15%;
+
+        height: 125px;
+
+        bottom: -50px;
+    }
+
+}
+
+
+/* =====================================================
+   SMALL PHONE
+===================================================== */
+
+@media (max-width: 390px) {
+
+    .navbar {
+
+        padding-left: 13px;
+
+        padding-right: 13px;
+    }
+
+
+    .logo {
+
+        font-size: 13px;
+    }
+
+
+    .content {
+
+        padding-left: 9px;
+
+        padding-right: 9px;
+    }
+
+
+    .guide-header h1 {
+
+        font-size: 22px;
+    }
+
+
+    .guide-header p {
+
+        font-size: 7px;
+
+        padding: 0 10px;
+    }
+
+
+    .guide-card {
+
+        min-height: 190px;
+
+        padding: 8px;
+    }
+
+
+    .guide-image {
+
+        height: 172px;
+    }
+
+
+    .guide-label {
+
+        font-size: 5.5px;
+    }
+
+
+    .guide-info h2 {
+
+        font-size: 10.5px;
+    }
+
+
+    .guide-info > p {
+
+        font-size: 5.7px;
+
+        line-height: 1.6;
+    }
+
+
+    .guide-user {
+
+        font-size: 5px;
+    }
+
+
+    .read-button {
+
+        font-size: 5.5px;
+
+        padding: 5px 6px;
+    }
+
+}
