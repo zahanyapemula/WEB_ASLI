@@ -104,7 +104,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Nama Produk</label><input id="name" placeholder="Contoh: Kopi Susu"></div>
 <div><label class="label">Harga Jual (Rp)</label><input id="price" type="number" min="1" placeholder="15000"></div>
 <div><label class="label">Harga Modal / HPP per unit (Rp)</label><input id="cost" type="number" min="0" placeholder="8000"></div>
-<div class="full"><label class="label" for="productOwner">Pemilik / Penitip Barang</label><div class="owner-picker"><div class="owner-picker-control"><input id="productOwner" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ownerSuggestions" placeholder="Pilih owner yang ada atau ketik nama baru" autocomplete="off"><button id="ownerPickerToggle" type="button" class="btn secondary owner-picker-toggle" aria-label="Tampilkan daftar owner" aria-expanded="false">▾</button></div><div id="ownerSuggestions" class="owner-picker-options" role="listbox" hidden></div></div><div class="small" style="margin-top:5px">Pilih owner dari daftar atau ketik nama owner baru.</div></div>
+<div class="full"><label class="label" for="productOwner">Pemilik / Penitip Barang</label><div class="owner-picker"><div class="owner-picker-control"><input id="productOwner" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ownerSuggestions" placeholder="Pilih akun UMKM terdaftar" autocomplete="off"><button id="ownerPickerToggle" type="button" class="btn secondary owner-picker-toggle" aria-label="Tampilkan daftar owner" aria-expanded="false">▾</button></div><div id="ownerSuggestions" class="owner-picker-options" role="listbox" hidden></div></div><div class="small" style="margin-top:5px">Pilih akun UMKM terdaftar agar produk muncul di Storage akun owner tersebut.</div></div>
 <div><label class="label">Kode Produk</label><input id="productCode" readonly placeholder="Otomatis saat produk dibuat"><div class="small" style="margin-top:5px">Kode dibuat otomatis dan unik untuk setiap produk.</div></div>
 <div><label class="label" for="barcodeInput">Kode Barcode</label><div class="barcode-input-row"><input id="barcodeInput" inputmode="numeric" autocomplete="off" placeholder="Kosongkan untuk otomatis"><button id="generateBarcode" type="button" class="btn barcode-generate">▦<span>Generate</span></button></div></div>
 <div class="full"><div class="note" style="margin:0 0 9px">🏷️ Klik Generate untuk membuat barcode EAN-13 atau kosongkan agar dibuat otomatis saat produk disimpan.</div><button id="add" class="btn primary" style="width:100%">＋ Simpan Produk</button></div>
@@ -147,15 +147,32 @@ const fmtDate=d=>new Date(d).toLocaleDateString("id-ID",{day:"2-digit",month:"2-
 
 let products=load(STORE.products,[]);
 let owners=load(STORE.owners,[]);
+const cleanOwner=name=>String(name||"").trim().replace(/\s+/g," ");
 let ownerAccounts=[];
+let ownerAccountsError=null;
 try { ownerAccounts=await KasirAuth.listOwnerAccounts(); }
-catch(error) { console.error("Daftar akun owner gagal dimuat:",error); }
+catch(error) {
+ ownerAccountsError=error;
+ console.error("Daftar akun owner gagal dimuat:",error);
+}
+if(!KasirAuth.isUmkm&&!ownerAccountsError){
+ let ownershipRepaired=false;
+ products=products.map(product=>{
+  const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===cleanOwner(product.owner).toLowerCase());
+  if(!account)return product;
+  if(product.owner!==account.owner_name||product.ownerCode!==account.owner_code||product._tenantUserId!==account.user_id){
+    ownershipRepaired=true;
+    return {...product,owner:account.owner_name,ownerCode:account.owner_code,_tenantUserId:account.user_id};
+  }
+  return product;
+ });
+ if(ownershipRepaired)save(STORE.products,products);
+}
 if(KasirAuth.isUmkm){
  $("productOwner").value=KasirAuth.profile?.owner_name||"";
  $("productOwner").readOnly=true;
  $("ownerPickerToggle").hidden=true;
 }
-const cleanOwner=name=>String(name||"").trim().replace(/\s+/g," ");
 function ownerCodeFor(name){
  const clean=cleanOwner(name).toLowerCase();
  if(!clean)return "";
@@ -179,7 +196,19 @@ function registerOwner(name){
     : cleanOwner(name);
   if(!ownerName){toast("Masukkan nama pemilik / penitip barang.");$("productOwner").focus();return null;}
   const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===ownerName.toLowerCase());
-  const owner={name:ownerName,code:ownerCodeFor(ownerName),userId:account?.user_id||KasirAuth.current()?.id||null};
+  if(!KasirAuth.isUmkm&&!account){
+    const reason=ownerAccountsError
+      ?`Daftar akun UMKM gagal dimuat: ${ownerAccountsError.message}`
+      :"Pilih nama UMKM dari daftar akun terdaftar. Nama owner biasa tidak terhubung ke akun UMKM.";
+    toast(reason);
+    $("productOwner").focus();
+    return null;
+  }
+  const owner={
+    name:account?.owner_name||ownerName,
+    code:account?.owner_code||ownerCodeFor(ownerName),
+    userId:account?.user_id||KasirAuth.current()?.id||null
+  };
   const existingIndex=owners.findIndex(item=>cleanOwner(item.name).toLowerCase()===cleanOwner(owner.name).toLowerCase());
   if(existingIndex>=0)owners[existingIndex]=owner;else owners.push(owner);
   save(STORE.owners,owners);
