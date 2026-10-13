@@ -1,6 +1,6 @@
 /* Web PKM - Supabase Auth + cloud data per account */
 (() => {
-  const SUPABASE_URL = 'https://pktvmwqyddxrhevvpuoo.supabase.co/rest/v1/';
+  const SUPABASE_URL = 'https://pktvmwqyddxrhevvpuoo.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_n1tyrcD0OwXVHFQ3lPZaow_P2nx7J7E';
   const DATA_NAMES = ['products','sales','cash','expenses'];
   const SESSION_KEY = 'kasirTokoSupabaseSession';
