@@ -94,7 +94,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;margin-bottom:12px"><input id="search" placeholder="Cari transaksi..."><select id="month"><option value="all">Semua Bulan</option></select></div><div class="table"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Barang yang Terjual</h3><span class="tag">Otomatis dari Kasir</span></div><div id="salesOwnerFilterWrap" style="max-width:360px;margin-bottom:12px"><label class="label" for="salesOwnerFilter">Filter Owner / UMKM Penitip</label><select id="salesOwnerFilter"><option value="">Semua Owner</option></select></div><div class="table"><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Kode Produk</th><th>Kode UMKM</th><th>Qty</th><th>Harga</th><th>Total</th></tr></thead><tbody id="sales"></tbody></table><div id="salesEmpty" class="empty">Belum ada penjualan.</div></div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan UMKM</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table"><table><thead><tr><th>Kode / UMKM</th><th>Barang Dititip (unit)</th><th>Laku (unit)</th><th>Sisa / Tidak Laku (unit)</th><th>Pendapatan UMKM</th><th>Status Pembayaran</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada data titipan atau penjualan pada tanggal ini.</div></div></div>
 </div>
 <div>
 <div class="card"><div class="title"><h3>Rekap Bulanan</h3><span class="tag">Otomatis</span></div><div id="months" class="months"></div><div id="monthEmpty" class="empty">Belum ada data.</div></div>
@@ -104,8 +104,6 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div><div id="toast" class="toast"></div><script>
 KasirAuth.ready.then(async () => {
 const STORE={
- products:KasirAuth.key("products"),
- sales:KasirAuth.key("sales"),
  cash:KasirAuth.key("cash"),
  expenses:KasirAuth.key("expenses")
 };
@@ -114,21 +112,27 @@ const load=(k,d=[])=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e)
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const rp=n=>"Rp "+Number(n||0).toLocaleString("id-ID");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Makassar",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+ return `${parts.find(part=>part.type==="year").value}-${parts.find(part=>part.type==="month").value}-${parts.find(part=>part.type==="day").value}`;
+};
 const toast=s=>{let t=$("toast");if(!t)return;t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800)};
-const fmtDate=d=>new Date(d).toLocaleDateString("id-ID",{day:"2-digit",month:"2-digit",year:"numeric"});
+const fmtDate=d=>new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Makassar",day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date(d));
 
-let cash=load(STORE.cash,[]),sales=load(STORE.sales,[]);
+let cash=load(STORE.cash,[]);
 const isManager=["admin","cashier"].includes(KasirAuth.role);
 let bookkeeping={cash:[],sales:[]};
+let stockMovements=[],settlements=[],ownerAccounts=[],inventoryProducts=[];
+let recapLoadErrors=[];
 $("date").value=today();
+ $("recapDate").value=today();
 if(!isManager){
  document.querySelector(".stats").style.display="none";
  document.querySelector("#add").closest(".card").style.display="none";
  document.querySelectorAll("#ledger, #months").forEach(element=>element.closest(".card")?.style.setProperty("display","none"));
  $("bookkeepingIntro").textContent="Berikut hanya penjualan produk titipan milik UMKM Anda. Catatan kas umum toko tidak ditampilkan.";
  $("bookkeepingNote").textContent="Akses penjualan dibatasi di server berdasarkan kode owner akun Anda.";
- $("salesOwnerFilterWrap").style.display="none";
+ $("recapOwnerFilterWrap").style.display="none";
 }
 function allCash(){return bookkeeping.cash.map(row=>row.entry).filter(entry=>entry&&entry.date).slice().sort((a,b)=>new Date(a.date)-new Date(b.date))}
 function render(){
@@ -140,36 +144,136 @@ function render(){
  let months=[...new Set(all.map(e=>e.date.slice(0,7)))].sort().reverse();let opt=[...$("month").options].map(x=>x.value);months.forEach(m=>{if(!opt.includes(m)){let o=document.createElement("option");o.value=m;o.textContent=m;$("month").appendChild(o)}});
  let g={};all.forEach(e=>{let m=e.date.slice(0,7);if(!g[m])g[m]={i:0,o:0};if(e.type==="pengeluaran")g[m].o+=+e.amount;else g[m].i+=+e.amount});
  $("months").innerHTML=months.map(m=>`<div class="month"><b>${m}</b><strong>${rp(g[m].i-g[m].o)}</strong><small>Masuk ${rp(g[m].i)} · Keluar ${rp(g[m].o)}</small></div>`).join("");$("monthEmpty").style.display=months.length?"none":"block";
- renderSales();
+ renderConsignmentRecap();
 }
-function renderSales(){
- const filter=$("salesOwnerFilter").value;
- let rows=bookkeeping.sales.filter(item=>!filter||item.owner_code===filter).slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(item=>`<tr><td>${fmtDate(item.date)}</td><td><b>${esc(item.name)}</b><div class="small">Barcode: ${esc(item.barcode||"—")}</div></td><td>${esc(item.code||"—")}</td><td>${esc(item.owner_code||"—")}${item.owner_name?`<div class="small">${esc(item.owner_name)}</div>`:""}</td><td>${Number(item.qty)||0}</td><td class="money">${rp(item.price)}</td><td class="money in">${rp(item.total)}</td></tr>`);
- $("sales").innerHTML=rows.join("");$("salesEmpty").style.display=rows.length?"none":"block";
+function dateInWita(value){
+ const date=new Date(value);
+ if(Number.isNaN(date.getTime()))return "";
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Makassar",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+ return `${parts.find(part=>part.type==="year").value}-${parts.find(part=>part.type==="month").value}-${parts.find(part=>part.type==="day").value}`;
 }
-function populateSalesOwnerFilter(){
- const select=$("salesOwnerFilter"),selected=select.value,owners=new Map();
- bookkeeping.sales.forEach(item=>{if(item.owner_code)owners.set(item.owner_code,`${item.owner_code} · ${item.owner_name||"UMKM"}`)});
- select.innerHTML='<option value="">Semua Owner</option>'+[...owners].sort((a,b)=>a[0].localeCompare(b[0])).map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join("");
+function populateRecapOwnerFilter(){
+ const select=$("recapOwnerFilter"),selected=select.value,owners=new Map();
+ [...ownerAccounts.map(owner=>({code:owner.owner_code,name:owner.owner_name})),
+  ...bookkeeping.sales.map(item=>({code:item.owner_code,name:item.owner_name})),
+  ...stockMovements.map(item=>({code:item.owner_code,name:item.owner_name})),
+  ...inventoryProducts.map(item=>({code:item.ownerCode||item.owner_code,name:item.owner||item.owner_name}))]
+  .forEach(owner=>{if(/^\d{4}$/.test(String(owner.code||"")))owners.set(String(owner.code),`${owner.code} · ${owner.name||"UMKM"}`)});
+ select.innerHTML='<option value="">Semua UMKM</option>'+[...owners].sort((a,b)=>a[0].localeCompare(b[0])).map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join("");
  if([...select.options].some(option=>option.value===selected))select.value=selected;
+}
+function renderConsignmentRecap(){
+ const day=$("recapDate").value,filter=$("recapOwnerFilter").value;
+ if(!day){$("recapRows").innerHTML="";$("recapEmpty").style.display="block";return}
+ const start=Date.parse(`${day}T00:00:00+08:00`),end=start+86400000;
+ const totals=new Map();
+ const ensureOwner=(code,name)=>{
+  code=String(code||"");
+  if(!/^\d{4}$/.test(code))return null;
+  if(!totals.has(code))totals.set(code,{code,name:name||`UMKM ${code}`,deposited:0,sold:0,revenue:0,remaining:0,paid:null});
+  else if(name)totals.get(code).name=name;
+  return totals.get(code);
+ };
+ ownerAccounts.forEach(owner=>ensureOwner(owner.owner_code,owner.owner_name));
+ bookkeeping.sales.forEach(item=>{
+   if(dateInWita(item.date)!==day)return;
+  const total=ensureOwner(item.owner_code,item.owner_name);
+  if(!total)return;
+  total.sold+=Number(item.qty)||0;
+  total.revenue+=Number(item.total)||0;
+ });
+ stockMovements.forEach(movement=>{
+  const total=ensureOwner(movement.owner_code,movement.owner_name);
+  if(!total)return;
+  const at=Date.parse(movement.occurred_at),quantity=Number(movement.quantity)||0;
+  if(!Number.isFinite(at)||at>=end)return;
+  if(at>=start&&["opening","stock_in"].includes(movement.movement_type))total.deposited+=quantity;
+  if(["opening","stock_in"].includes(movement.movement_type))total.remaining+=quantity;
+  else total.remaining-=quantity;
+ });
+ if(day===today()){
+  totals.forEach(total=>{total.remaining=0});
+  inventoryProducts.forEach(product=>{
+   const total=ensureOwner(product.ownerCode||product.owner_code,product.owner||product.owner_name);
+   if(total)total.remaining+=Math.max(0,Number(product.stock)||0);
+  });
+ }
+ settlements.forEach(item=>{
+  const total=totals.get(String(item.owner_code||""));
+  if(total&&item.settlement_date===day)total.paid=item;
+ });
+ const rows=[...totals.values()].filter(total=>!filter||total.code===filter).sort((a,b)=>a.code.localeCompare(b.code)).map(total=>{
+  const settlement=total.paid;
+  const settleButton=isManager
+   ?`<button type="button" class="btn ${settlement?"secondary":"primary"}" data-settlement="${esc(total.code)}" data-owner-name="${esc(total.name)}" data-units="${total.sold}" data-revenue="${total.revenue}" ${settlement||total.revenue<=0?"disabled":""}>${settlement?"Sudah dibayar":"Tandai dibayar"}</button>`
+   :settlement?'<span class="badge good">Sudah dibayar</span>':'<span class="badge warn">Belum dibayar</span>';
+  return `<tr><td><b>${esc(total.code)}</b><div class="small">${esc(total.name)}</div></td><td>${total.deposited}</td><td>${total.sold}</td><td>${Math.max(0,total.remaining)}</td><td class="money in">${rp(total.revenue)}</td><td>${settleButton}</td></tr>`;
+ });
+ $("recapRows").innerHTML=rows.join("");
+ $("recapEmpty").style.display=rows.length?"none":"block";
+ const firstMovement=stockMovements.map(item=>item.occurred_at).filter(Boolean).sort()[0];
+ const coverage=firstMovement
+  ?start<Date.parse(firstMovement)
+   ?" Mutasi stok belum tercatat pada tanggal tersebut; jumlah titipan dan sisa bisa tidak lengkap."
+   :` Riwayat mutasi tersedia sejak ${fmtDate(firstMovement)}.`
+  :" Belum ada riwayat mutasi stok; jumlah titipan dan sisa belum dapat dihitung.";
+ const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
+ $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · sisa dihitung dari mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
 }
 async function loadBookkeeping(){
  $("bookkeepingNotice").textContent="Memuat data Buku Kas sesuai hak akses...";
+ $("recapNotice").textContent="Memuat data rekap titipan...";
  try{
   bookkeeping=await KasirAuth.listBookkeepingData();
-  populateSalesOwnerFilter();
-  $("bookkeepingNotice").textContent="";
  }catch(error){
   console.error("Data Buku Kas gagal dimuat:",error);
   bookkeeping={cash:[],sales:[]};
   $("bookkeepingNotice").textContent=`Data Buku Kas tidak dapat dimuat: ${error.message}`;
  }
+ const results=await Promise.allSettled([
+  KasirAuth.listStockMovements(),
+  KasirAuth.listOwnerSettlements(),
+  isManager?KasirAuth.listOwnerAccounts():Promise.resolve([]),
+  isManager?KasirAuth.refreshInventoryProducts():KasirAuth.listOwnerStorageProducts()
+ ]);
+ const [movementsResult,settlementsResult,ownersResult,productsResult]=results;
+ const errors=[];
+ if(movementsResult.status==="fulfilled")stockMovements=movementsResult.value;
+ else errors.push(`Mutasi stok: ${movementsResult.reason.message}`);
+ if(settlementsResult.status==="fulfilled")settlements=settlementsResult.value;
+ else errors.push(`Status pembayaran: ${settlementsResult.reason.message}`);
+ if(ownersResult.status==="fulfilled")ownerAccounts=ownersResult.value;
+ else errors.push(`Daftar UMKM: ${ownersResult.reason.message}`);
+ if(productsResult.status==="fulfilled")inventoryProducts=productsResult.value;
+ else errors.push(`Stok tersisa: ${productsResult.reason.message}`);
+ recapLoadErrors=errors;
+ populateRecapOwnerFilter();
  render();
 }
 $("add").onclick=()=>{if(!isManager)return;let d=$("date").value,t=$("type").value,desc=$("desc").value.trim(),amount=+$("amount").value;if(!d||!desc||!amount)return toast("Lengkapi data");const entry={id:"MAN-"+Date.now(),date:d,type:t,desc,amount};cash.push(entry);save(STORE.cash,cash);bookkeeping.cash.push({user_id:KasirAuth.current()?.id,entry});$("desc").value="";$("amount").value="";render();toast("Catatan kas tersimpan")};
-$("search").oninput=render;$("month").onchange=render;$("salesOwnerFilter").onchange=renderSales;
+$("search").oninput=render;$("month").onchange=render;
+$("recapDate").onchange=renderConsignmentRecap;$("recapOwnerFilter").onchange=renderConsignmentRecap;
+$("recapRows").addEventListener("click",async event=>{
+ const button=event.target.closest("[data-settlement]");
+ if(!button||button.disabled)return;
+ const ownerCode=button.dataset.settlement,date=$("recapDate").value;
+ if(!confirm(`Tandai pendapatan ${button.dataset.ownerName} pada ${fmtDate(`${date}T12:00:00+08:00`)} sebesar ${rp(button.dataset.revenue)} sudah dibayarkan?`))return;
+ button.disabled=true;
+ try{
+  await KasirAuth.markOwnerSettlement({ownerCode,ownerName:button.dataset.ownerName,date,unitsSold:button.dataset.units,grossAmount:button.dataset.revenue});
+  settlements=await KasirAuth.listOwnerSettlements();
+  renderConsignmentRecap();
+  toast("Status pembayaran UMKM tersimpan.");
+ }catch(error){
+  console.error("Status pembayaran UMKM gagal disimpan:",error);
+  button.disabled=false;
+  toast(`Pembayaran belum tercatat: ${error.message}`);
+ }
+});
 $("export").onclick=()=>{if(!isManager)return;let csv="Tanggal,ID,Keterangan,Jenis,Nominal\n";bookkeeping.cash.map(row=>row.entry).filter(Boolean).forEach(e=>csv+=`"${e.date}","${e.id}","${String(e.desc).replace(/"/g,'""')}","${e.type}","${e.amount}"\n`);let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="buku-kas.csv";a.click()};
-window.addEventListener("storage",()=>{cash=load(STORE.cash,[]);sales=load(STORE.sales,[]);void loadBookkeeping()});void loadBookkeeping();
+window.addEventListener("storage",()=>{cash=load(STORE.cash,[]);void loadBookkeeping()});
+window.addEventListener("focus",()=>void loadBookkeeping());
+void loadBookkeeping();
 });
 </script><script src="shared-navbar.js"></script>
 </body></html>

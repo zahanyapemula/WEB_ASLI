@@ -193,12 +193,19 @@
   async function listStockMovements() {
     await ready;
     if (!client || !currentUser) throw new Error('Silakan login untuk memuat riwayat stok.');
-    const { data, error } = await client
-      .from('stock_movements')
-      .select('id, product_id, product_code, product_name, owner_code, owner_name, movement_type, quantity, gross_amount, occurred_at, sale_id, note, actor_user_id')
-      .order('occurred_at');
-    if (error) throw error;
-    return data || [];
+    const pageSize = 1000;
+    const movements = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from('stock_movements')
+        .select('id, product_id, product_code, product_name, owner_code, owner_name, movement_type, quantity, gross_amount, occurred_at, sale_id, note, actor_user_id')
+        .order('occurred_at')
+        .order('id')
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      movements.push(...(data || []));
+      if (!data || data.length < pageSize) return movements;
+    }
   }
 
   async function recordStockMovements(movements) {
@@ -234,12 +241,19 @@
   async function listOwnerSettlements() {
     await ready;
     if (!client || !currentUser) throw new Error('Silakan login untuk memuat status pembayaran.');
-    const { data, error } = await client
-      .from('owner_settlements')
-      .select('owner_code, owner_name, settlement_date, units_sold, gross_amount, paid_at, paid_by')
-      .order('settlement_date', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    const pageSize = 1000;
+    const settlements = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await client
+        .from('owner_settlements')
+        .select('owner_code, owner_name, settlement_date, units_sold, gross_amount, paid_at, paid_by')
+        .order('settlement_date', { ascending: false })
+        .order('owner_code')
+        .range(offset, offset + pageSize - 1);
+      if (error) throw error;
+      settlements.push(...(data || []));
+      if (!data || data.length < pageSize) return settlements;
+    }
   }
 
   async function listBookkeepingData() {

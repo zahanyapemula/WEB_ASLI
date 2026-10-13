@@ -32,10 +32,6 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;ma
 .note{margin-top:14px;padding:12px 14px;border-radius:13px;background:var(--soft);color:#327b3a;font-size:11.5px}
 .grid{display:grid;grid-template-columns:1.25fr .75fr;gap:16px;margin-top:16px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
-.storage-panels{display:grid;grid-template-columns:minmax(320px,.8fr) minmax(0,1.2fr);align-items:start;gap:16px;margin-top:16px}
-.storage-panels>.card{min-width:0}
-.storage-panels .grid3{grid-template-columns:1fr}
-.storage-panels .table{max-height:70vh}
 .card{background:#fffffff7;border:1px solid var(--line);border-radius:20px;padding:19px;box-shadow:var(--shadow)}
 .title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.title h3,.title h2{margin:0;font-size:17px}
 .tag{background:var(--soft);color:#347e3c;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:800}
@@ -74,7 +70,6 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .pill-row{display:flex;gap:7px;flex-wrap:wrap}.pill{padding:7px 10px;border-radius:99px;background:var(--soft);font-size:10px;font-weight:800;color:#367e3c}
 .scanner-box{display:grid;grid-template-columns:1fr 100px;gap:9px}.ingredient-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#fff}.ingredient-card h4{margin:0 0 8px}.ingredient-list{display:grid;gap:7px}.ingredient{display:flex;justify-content:space-between;padding:9px 10px;background:var(--soft2);border-radius:10px;font-size:11px}
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
-@media(max-width:850px){.storage-panels{grid-template-columns:1fr}.storage-panels .table{max-height:none}}
 @media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
 </style>    <script src="auth.js"></script>
 <link rel="stylesheet" href="shared-navbar.css">
@@ -87,30 +82,26 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div></header>
 <div class="hero"><h2><span>Storage</span> Produk</h2><p>Catat barang titipan yang tersedia di toko. Atur stok, pemilik barang, batas minimum stok, dan ingredient setiap produk.</p><div class="note">🔔 Produk yang dibuat di halaman <b>Produk</b> otomatis muncul di sini. Atur stok awal dan penitipnya. Jika stok ≤ batas minimum, muncul peringatan restok. Saat transaksi di Kasir selesai, stok otomatis berkurang.</div></div>
 <div id="alerts" style="margin-top:16px"></div>
-<div class="card"><div class="title"><h3>Kelola Stok &amp; Ingredient</h3><span class="tag">Terhubung dengan Produk</span></div>
+<div class="card"><div class="title"><h3>Kelola Stok &amp; Ingredient</h3><span class="tag">Rekap titipan tersedia di Buku Kas</span></div>
 <div class="form"><div><label class="label">Pilih Produk</label><select id="product"></select></div><div><label class="label">Pemilik / Penitip Barang</label><select id="owner"><option value="">Belum diatur</option></select><div class="small" style="margin-top:5px">Tambahkan owner baru dari halaman Produk; owner tersimpan di sini untuk dipilih ulang.</div></div><div><label class="label">Kode UMKM</label><input id="ownerCode" readonly placeholder="Terisi saat owner dipilih"></div><div><label class="label">Stok Saat Ini</label><input id="stock" type="number" min="0" placeholder="0"></div><div><label class="label">Batas Minimum Stok</label><input id="reorder" type="number" min="0" placeholder="3"></div><div class="full"><label class="label">Ingredient / Bahan Produk</label><textarea id="ingredients" placeholder="Contoh: Kopi 20 g, Susu 150 ml, Gula 10 g"></textarea></div><div class="full"><button id="saveStorage" class="btn primary" style="width:100%">💾 Simpan Data Storage</button></div></div></div>
-<div class="storage-panels">
-<div class="card"><div class="title"><h3 id="recapTitle">Rekapan Titipan per UMKM</h3><button id="printRecap" type="button" class="btn secondary">🖨️ Cetak Rekap</button></div><div style="max-width:240px;margin-bottom:8px"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="ledgerNotice" class="small" style="margin-bottom:14px">Memuat riwayat stok...</div><div id="ownerSummary" class="grid3"></div><div id="summaryEmpty" class="empty">Belum ada data titipan atau transaksi pada tanggal ini.</div></div>
-<div class="card"><div class="title"><h3>Daftar Penyimpanan</h3><span id="lowTag" class="tag">0 stok rendah</span></div><div style="max-width:360px;margin-bottom:14px"><label class="label" for="ownerFilter">Filter Owner / UMKM Penitip</label><select id="ownerFilter"><option value="">Semua Owner</option></select></div><div class="table"><table><thead><tr><th>Produk</th><th>Pemilik</th><th>Stok</th><th>Min.</th><th>Status</th><th>Ingredient</th><th></th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty">Belum ada produk.</div></div></div>
-</div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Penyimpanan</h3><span id="lowTag" class="tag">0 stok rendah</span></div><div style="max-width:360px;margin-bottom:14px"><label class="label" for="ownerFilter">Filter Owner / UMKM Penitip</label><select id="ownerFilter"><option value="">Semua Owner</option></select></div><div class="table"><table><thead><tr><th>Produk</th><th>Pemilik</th><th>Stok</th><th>Min.</th><th>Status</th><th>Ingredient</th><th></th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty">Belum ada produk.</div></div></div>
 </div><div id="toast" class="toast"></div>
 <script>
 KasirAuth.ready.then(async ()=>{
-const STORE={products:KasirAuth.key('products'),sales:KasirAuth.key('sales'),cash:KasirAuth.key('cash'),expenses:KasirAuth.key('expenses'),owners:KasirAuth.key('owners')};
+const STORE={products:KasirAuth.key('products'),owners:KasirAuth.key('owners')};
 const $=id=>document.getElementById(id);
 const load=(k,d=[])=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const t=$('toast');if(!t)return;t.textContent=s;t.classList.add('show');clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>t.classList.remove('show'),1800)};
 const isUmkm=KasirAuth.isUmkm;
-let products=load(STORE.products,[]),sales=load(STORE.sales,[]),owners=load(STORE.owners,[]);
+let products=load(STORE.products,[]),owners=load(STORE.owners,[]);
 let storageFormDirty=false;
 let ownerAccounts=[];
 let stockMovements=[];
-let settlements=[];
 if(isUmkm){
  try{products=await KasirAuth.listOwnerStorageProducts()}
- catch(error){console.error('Produk titipan gagal dimuat:',error);$('ledgerNotice').textContent=`Produk titipan tidak dapat dimuat: ${error.message}`;products=[]}
+ catch(error){console.error('Produk titipan gagal dimuat:',error);toast(`Produk titipan tidak dapat dimuat: ${error.message}`);products=[]}
 }else{
  try { ownerAccounts=await KasirAuth.listOwnerAccounts(); }
  catch(error) { console.error('Daftar akun owner gagal dimuat:',error); }
@@ -183,7 +174,6 @@ $('saveStorage').addEventListener('click',async()=>{
     note:delta>0?'Penambahan stok melalui Storage':'Pengurangan stok melalui Storage'
    }]);
    stockMovements=await KasirAuth.listStockMovements();
-   renderSummary();
    toast('Stok tersimpan dan riwayat mutasi tersinkron ✅');
   }catch(error){
    console.error('Riwayat mutasi stok gagal disinkronkan:',error);
@@ -192,84 +182,10 @@ $('saveStorage').addEventListener('click',async()=>{
  }else toast('Data storage berhasil disimpan ✅');
  storageFormDirty=false;
 });
-function ownerMatches(name,code,profile){return (!!profile?.owner_code&&String(code||'')===String(profile.owner_code))|| (!!profile?.owner_name&&cleanOwner(name).toLowerCase()===cleanOwner(profile.owner_name).toLowerCase())}
-function renderSummary(){
- const day=$('recapDate').value,profile=KasirAuth.isUmkm?KasirAuth.profile:null;
- const totals=new Map();
- products.forEach(product=>{
-  if(!product.owner|| (profile&&!ownerMatches(product.owner,product.ownerCode,profile)))return;
-  const key=String(product.ownerCode||product.owner).toLowerCase();
-  if(!totals.has(key))totals.set(key,{code:product.ownerCode||'----',owner:product.owner,opening:0,incoming:0,sold:0,outgoing:0,closing:0,revenue:0,remaining:0,products:0});
-  const total=totals.get(key);total.remaining+=Number(product.stock)||0;total.products++;
- });
- const start=Date.parse(`${day}T00:00:00+08:00`),end=start+86400000;
- stockMovements.forEach(movement=>{
-  const code=String(movement.owner_code||''),key=code.toLowerCase();
-  if(!totals.has(key))totals.set(key,{code,owner:movement.owner_name||`Owner ${code}`,opening:0,incoming:0,sold:0,outgoing:0,closing:0,revenue:0,remaining:0,products:0});
-  const total=totals.get(key),time=Date.parse(movement.occurred_at),quantity=Number(movement.quantity)||0;
-  if(time<start){
-   if(movement.movement_type==='opening'||movement.movement_type==='stock_in')total.opening+=quantity;
-   else total.opening-=quantity;
-  }else if(time<end){
-   if(movement.movement_type==='opening'||movement.movement_type==='stock_in')total.incoming+=quantity;
-   else if(movement.movement_type==='sale'){total.sold+=quantity;total.revenue+=Number(movement.gross_amount)||0}
-   else total.outgoing+=quantity;
-  }
- });
- totals.forEach(total=>{total.closing=Math.max(0,total.opening+total.incoming-total.sold-total.outgoing)});
- const values=[...totals.values()].sort((a,b)=>String(a.code).localeCompare(String(b.code))||a.owner.localeCompare(b.owner,'id'));
- $('recapTitle').textContent=profile?`Rekapan Titipan · ${profile.owner_name||'UMKM'}`:'Rekapan Titipan per UMKM';
- $('ownerSummary').innerHTML=values.map(total=>{
-  const settlement=settlements.find(item=>item.settlement_date===day&&String(item.owner_code||'').toLowerCase()===String(total.code).toLowerCase());
-  const paid=!!settlement?.paid_at;
-  const maySettle=!KasirAuth.isUmkm;
-  return `<div class="stat" data-recap-owner="${esc(total.code)}"><small>${esc(total.code)} · ${esc(total.owner)}</small><strong>${total.products}</strong><small>Produk titipan</small><strong>${total.opening}</strong><small>Stok awal tanggal ${esc(day)}</small><strong>${total.incoming}</strong><small>Stok masuk (termasuk saldo awal ledger)</small><strong>${total.sold}</strong><small>Unit terjual</small><strong>${total.outgoing}</strong><small>Stok keluar / reset harian</small><strong>${total.closing}</strong><small>Stok akhir tanggal</small><strong>${rp(total.revenue)}</strong><small>Hasil penjualan kotor</small><div style="margin-top:10px"><span class="badge ${paid?'good':'warn'}">${paid?'Sudah dibayar':'Belum dibayar'}</span>${maySettle?`<button type="button" class="btn ${paid?'secondary':'primary'}" data-settlement="${esc(total.code)}" style="width:100%;margin-top:8px" ${paid||total.sold<=0?'disabled':''}>${paid?'Pembayaran dicatat':'Tandai sudah dibayar'}</button>`:''}</div></div>`;
- }).join('');
- $('summaryEmpty').style.display=values.length?'none':'block';
- $('printRecap').disabled=!values.length;
- const firstMovement=stockMovements.map(item=>item.occurred_at).sort()[0];
- $('ledgerNotice').textContent=firstMovement
-  ?`Riwayat stok tersedia sejak ${new Date(firstMovement).toLocaleDateString('id-ID')}. Stok sebelum tanggal tersebut belum tercatat.`
-  :'Riwayat stok belum dimulai. Atur stok produk di Storage untuk membuat saldo awal ledger.';
-}
-function printSummary(){
- const day=$('recapDate').value,heading=$('recapTitle').textContent;
- const cards=[...$('ownerSummary').querySelectorAll('[data-recap-owner]')];
- if(!cards.length)return toast('Tidak ada data rekap untuk dicetak.');
- const rows=cards.map(card=>`<tr>${[...card.querySelectorAll('small')].slice(0,1).map(node=>`<td>${esc(node.textContent)}</td>`).join('')}${[...card.querySelectorAll('strong')].map(node=>`<td>${esc(node.textContent)}</td>`).join('')}<td>${esc(card.querySelector('.badge')?.textContent||'')}</td></tr>`).join('');
- const report=window.open('','_blank','width=900,height=700');
- if(!report)return toast('Browser memblokir jendela cetak. Izinkan pop-up untuk situs ini lalu coba lagi.');
- report.document.write(`<!doctype html><html lang="id"><meta charset="utf-8"><title>${esc(heading)}</title><style>body{font:14px Arial,sans-serif;padding:24px;color:#172b1d}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #bbb;padding:10px;text-align:left}th{background:#edf5eb}@media print{button{display:none}}</style><h1>${esc(heading)}</h1><p>Tanggal rekap: ${esc(day)}</p><table><thead><tr><th>Owner</th><th>Produk</th><th>Stok tersedia</th><th>Unit terjual</th><th>Penjualan kotor</th><th>Status pembayaran</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print()<\/script></html>`);
- report.document.close();
-}
-$('printRecap').addEventListener('click',printSummary);
-$('ownerSummary').addEventListener('click',event=>{
- const button=event.target.closest('[data-settlement]');
- if(!button||button.disabled||KasirAuth.isUmkm)return;
- const code=button.dataset.settlement,day=$('recapDate').value;
- const card=button.closest('[data-recap-owner]');
- const owner=card?.querySelector('small')?.textContent.split(' · ').slice(1).join(' · ')||code;
- if(!confirm(`Catat hasil penjualan ${owner} pada ${day} sebagai sudah dibayar?`))return;
- button.disabled=true;
- const strong=[...card.querySelectorAll('strong')];
- KasirAuth.markOwnerSettlement({
-  ownerCode:code,ownerName:owner,date:day,
-  unitsSold:Number(strong[3]?.textContent)||0,
-  grossAmount:Number(String(strong[6]?.textContent||'').replace(/[^\d]/g,''))||0
- }).then(async()=>{
-  settlements=await KasirAuth.listOwnerSettlements();
-  renderSummary();toast('Status pembayaran tersimpan dan tersinkron ke Supabase.');
- }).catch(error=>{
-  console.error('Status pembayaran gagal disimpan:',error);
-  button.disabled=false;
-  toast(`Pembayaran belum tercatat: ${error.message}`);
- });
-});
 let historyLoading=false;
 async function loadSharedHistory(){
  if(historyLoading)return;
  historyLoading=true;
- $('ledgerNotice').textContent='Memuat mutasi stok dan status pembayaran dari Supabase...';
  try{
   stockMovements=await KasirAuth.listStockMovements();
   const recordedProducts=new Set(stockMovements.map(item=>String(item.product_id)));
@@ -287,16 +203,9 @@ async function loadSharedHistory(){
   }
  }catch(error){
   console.error('Riwayat stok tidak dapat dimuat:',error);
-  $('ledgerNotice').textContent=`Riwayat stok belum tersedia: ${error.message}`;
- }
- try{
-  settlements=await KasirAuth.listOwnerSettlements();
- }catch(error){
-  console.error('Status pembayaran tidak dapat dimuat:',error);
-  $('ledgerNotice').textContent+=` Status pembayaran belum tersedia: ${error.message}`;
+  toast(`Riwayat stok belum tersedia: ${error.message}`);
  }
  historyLoading=false;
- renderSummary();
 }
 let refreshingStorage=false;
 async function refreshStorageData(){
@@ -310,25 +219,22 @@ async function refreshStorageData(){
   await loadSharedHistory();
  }catch(error){
   console.error('Pembaruan Storage gagal:',error);
-  $('ledgerNotice').textContent=`Pembaruan Storage gagal: ${error.message}`;
+  toast(`Pembaruan Storage gagal: ${error.message}`);
  }finally{refreshingStorage=false}
 }
 window.addEventListener('focus',refreshStorageData);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refreshStorageData()});
 window.setInterval(()=>{if(document.visibilityState==='visible')void refreshStorageData()},60_000);
-function render(){const rows=$('rows'),alerts=$('alerts'),filter=$('ownerFilter').value;rows.innerHTML='';let low=0;const visible=products.filter(p=>!filter||String(p.ownerCode||'')===filter);const groups=new Map();visible.forEach(p=>{const key=p.ownerCode||'~~~~';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p)});[...groups].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([code,items])=>{const heading=document.createElement('tr');heading.innerHTML=`<td colspan="7"><b>${code==='~~~~'?'Belum diatur':`Kode UMKM ${esc(code)} · ${esc(items[0].owner||'Belum diatur')}`}</b></td>`;heading.style.background='var(--soft2)';rows.appendChild(heading);items.forEach(p=>{const isLow=Number(p.stock||0)<=Number(p.reorder||0);if(isLow)low++;const tr=document.createElement('tr');tr.innerHTML=`<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code||p.productCode||'')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode||'----')}<div class="small">${esc(p.owner||'Belum diatur')}</div></td><td><span class="stock-num ${isLow?'stock-low':''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow?'warn':'good'}">${isLow?'Perlu Restok':'Aman'}</span></td><td>${p.ingredients?.length?esc(formatIngredients(p.ingredients)):'<span class="small">Belum diisi</span>'}</td><td><button class="btn secondary edit-stock">${isUmkm?'Edit Ingredient':'Edit'}</button></td>`;tr.querySelector('.edit-stock').onclick=()=>{selectedId=p.id;$('product').value=p.id;loadForm();window.scrollTo({top:0,behavior:'smooth'})};rows.appendChild(tr)})});$('empty').style.display=visible.length?'none':'block';$('lowTag').textContent=`${low} stok rendah`;alerts.innerHTML=low?`<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>`:'';renderSummary()}
-const witaDateParts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Makassar',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
-const today=`${witaDateParts.find(part=>part.type==='year').value}-${witaDateParts.find(part=>part.type==='month').value}-${witaDateParts.find(part=>part.type==='day').value}`;
-$('recapDate').value=today;$('recapDate').addEventListener('change',renderSummary);
+function render(){const rows=$('rows'),alerts=$('alerts'),filter=$('ownerFilter').value;rows.innerHTML='';let low=0;const visible=products.filter(p=>!filter||String(p.ownerCode||'')===filter);const groups=new Map();visible.forEach(p=>{const key=p.ownerCode||'~~~~';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p)});[...groups].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([code,items])=>{const heading=document.createElement('tr');heading.innerHTML=`<td colspan="7"><b>${code==='~~~~'?'Belum diatur':`Kode UMKM ${esc(code)} · ${esc(items[0].owner||'Belum diatur')}`}</b></td>`;heading.style.background='var(--soft2)';rows.appendChild(heading);items.forEach(p=>{const isLow=Number(p.stock||0)<=Number(p.reorder||0);if(isLow)low++;const tr=document.createElement('tr');tr.innerHTML=`<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code||p.productCode||'')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode||'----')}<div class="small">${esc(p.owner||'Belum diatur')}</div></td><td><span class="stock-num ${isLow?'stock-low':''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow?'warn':'good'}">${isLow?'Perlu Restok':'Aman'}</span></td><td>${p.ingredients?.length?esc(formatIngredients(p.ingredients)):'<span class="small">Belum diisi</span>'}</td><td><button class="btn secondary edit-stock">${isUmkm?'Edit Ingredient':'Edit'}</button></td>`;tr.querySelector('.edit-stock').onclick=()=>{selectedId=p.id;$('product').value=p.id;loadForm();window.scrollTo({top:0,behavior:'smooth'})};rows.appendChild(tr)})});$('empty').style.display=visible.length?'none':'block';$('lowTag').textContent=`${low} stok rendah`;alerts.innerHTML=low?`<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>`:''}
 window.addEventListener('storage',async()=>{
  if(isUmkm){
   try{products=await KasirAuth.listOwnerStorageProducts()}
-  catch(error){console.error('Pembaruan produk titipan gagal:',error);$('ledgerNotice').textContent=`Produk titipan tidak dapat dimuat: ${error.message}`}
+  catch(error){console.error('Pembaruan produk titipan gagal:',error);toast(`Produk titipan tidak dapat dimuat: ${error.message}`)}
  }else{
-  products=load(STORE.products,[]);owners=load(STORE.owners,[]);sales=load(STORE.sales,[]);products=products.map(normalize)
+  products=load(STORE.products,[]);owners=load(STORE.owners,[]);products=products.map(normalize)
  }
  if(!products.some(product=>product.id===selectedId))selectedId=products[0]?.id||'';
  populateOwners();populate();populateOwnerFilter();render()
-});populateOwners();populate();populateOwnerFilter();render();KasirAuth.ready.then(loadSharedHistory).catch(error=>{console.error('Inisialisasi rekap gagal:',error);$('ledgerNotice').textContent=`Rekap online belum siap: ${error.message}`});
+});populateOwners();populate();populateOwnerFilter();render();KasirAuth.ready.then(loadSharedHistory).catch(error=>{console.error('Inisialisasi riwayat stok gagal:',error);toast(`Riwayat stok belum siap: ${error.message}`)});
 });
 </script><script src="shared-navbar.js"></script></body></html>
