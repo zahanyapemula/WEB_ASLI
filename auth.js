@@ -89,6 +89,7 @@
     if (error) reportCloudError(error);
   }
 
+  const pendingProductSaves = new Set();
   const originalSetItem = localStorage.setItem.bind(localStorage);
   localStorage.setItem = function(key, value) {
     originalSetItem(key, value);
@@ -96,12 +97,21 @@
       let parsed = value;
       try { parsed = JSON.parse(value); } catch {}
       const name = DATA_NAMES.find(n => key === localKey(n));
-      if (name) void saveCloud(name, parsed).catch(reportCloudError);
+      if (name) {
+        const pending = saveCloud(name, parsed);
+        if (name === 'products') {
+          pendingProductSaves.add(pending);
+          void pending.catch(reportCloudError).finally(() => pendingProductSaves.delete(pending));
+        } else {
+          void pending.catch(reportCloudError);
+        }
+      }
     }
   };
 
   async function hydrateCloud() {
     if (!client || !currentUser || !session?.access_token) return;
+    if (currentProfile?.role === 'umkm') return;
     hydrating = true;
     try {
       let query = client.from('user_data').select('user_id,key,value');
@@ -129,6 +139,30 @@
     } finally { hydrating = false; }
   }
 
+  async function refreshInventoryProducts() {
+    await ready;
+    if (!client || !currentUser || !['admin', 'cashier'].includes(currentProfile?.role)) {
+      throw new Error('Hanya Admin/Kasir yang dapat memuat ulang seluruh produk.');
+    }
+    await Promise.all([...pendingProductSaves]);
+    const { data, error } = await client
+      .from('user_data')
+      .select('user_id, value')
+      .eq('key', 'products');
+    if (error) throw error;
+    const products = [];
+    loadedProductTenantIds.clear();
+    for (const row of data || []) {
+      loadedProductTenantIds.add(row.user_id);
+      if (Array.isArray(row.value)) {
+        products.push(...row.value.map(product => ({ ...product, _tenantUserId: row.user_id })));
+      }
+    }
+    if (!loadedProductTenantIds.has(currentUser.id)) loadedProductTenantIds.add(currentUser.id);
+    originalSetItem(localKey('products'), JSON.stringify(products));
+    return products;
+  }
+
   async function loadProfile(userId = currentUser?.id) {
     if (!client || !userId) return null;
     const { data, error } = await client
@@ -140,6 +174,10 @@
     if (!data) throw new Error('Profil akun belum tersedia. Jalankan migrasi supabase_schema.sql di Supabase.');
     currentProfile = data;
     return data;
+  }
+
+  function clearUmkmLocalData() {
+    for (const name of [...DATA_NAMES, 'owners']) localStorage.removeItem(localKey(name));
   }
 
   async function listOwnerAccounts() {
@@ -215,6 +253,34 @@
     return data;
   }
 
+  async function listOwnerStorageProducts() {
+    await ready;
+    if (!client || !currentUser || currentProfile?.role !== 'umkm') {
+      throw new Error('Fitur daftar produk titipan hanya tersedia untuk akun UMKM.');
+    }
+    const { data, error } = await client.rpc('get_owner_storage_products');
+    if (error) throw error;
+    if (!data || !Array.isArray(data.products)) {
+      throw new Error('Respons produk titipan dari Supabase tidak valid.');
+    }
+    return data.products;
+  }
+
+  async function updateOwnerProductIngredients(productId, ingredients) {
+    await ready;
+    if (!client || !currentUser || currentProfile?.role !== 'umkm') {
+      throw new Error('Fitur ubah ingredient hanya tersedia untuk akun UMKM.');
+    }
+    if (!Array.isArray(ingredients)) throw new Error('Format ingredient tidak valid.');
+    const { data, error } = await client.rpc('update_owner_product_ingredients', {
+      p_product_id: String(productId),
+      p_ingredients: ingredients
+    });
+    if (error) throw error;
+    if (!data?.product) throw new Error('Produk titipan tidak ditemukan atau bukan milik akun ini.');
+    return data.product;
+  }
+
   async function markOwnerSettlement({ ownerCode, ownerName, date, unitsSold, grossAmount }) {
     await ready;
     if (!client || !currentUser) throw new Error('Silakan login untuk mencatat pembayaran.');
@@ -251,6 +317,9 @@
     writeLocal(CURRENT_KEY, currentUser);
     originalSetItem(LOGIN_KEY, 'true');
     await loadProfile(currentUser.id);
+    if (currentProfile?.role === 'umkm') {
+      clearUmkmLocalData();
+    }
     await hydrateCloud();
     return currentUser;
   }
@@ -274,6 +343,7 @@
     writeLocal(SESSION_KEY, session);
     writeLocal(CURRENT_KEY, currentUser);
     originalSetItem(LOGIN_KEY, 'true');
+    if (currentProfile?.role === 'umkm') clearUmkmLocalData();
     await hydrateCloud();
     return { needsConfirmation: false, user: currentUser };
   }
@@ -285,7 +355,26 @@
     if (error) throw error;
     session = data.session;
     currentUser = data.user;
-    await loadProfile(currentUser.id);
+    try {
+      await loadProfile(currentUser.id);
+      if (!['admin', 'cashier', 'umkm'].includes(currentProfile?.role)) {
+        throw new Error('Role akun belum diatur dengan benar. Hubungi administrator.');
+      }
+    } catch (error) {
+      if (currentUser) {
+        const { error: signOutError } = await client.auth.signOut();
+        session = null;
+        currentUser = null;
+        currentProfile = null;
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(CURRENT_KEY);
+        localStorage.removeItem(LOGIN_KEY);
+        if (signOutError) {
+          throw new Error(`${error.message} Sesi belum dapat ditutup: ${signOutError.message}`);
+        }
+      }
+      throw error;
+    }
     writeLocal(SESSION_KEY, session);
     writeLocal(CURRENT_KEY, currentUser);
     originalSetItem(LOGIN_KEY, 'true');
@@ -499,7 +588,7 @@
     DATA_NAMES, accounts, current, read, write, key, setSession,
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
-    listBookkeepingData, ready,
+    listBookkeepingData, listOwnerStorageProducts, updateOwnerProductIngredients, refreshInventoryProducts, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },
@@ -536,9 +625,30 @@
       location.replace('login.html');
       return;
     }
-    if (user && (file === 'login.html' || file === 'register.html')) {
-      location.replace('fitur.html');
+    if (user && currentProfile?.role === 'umkm' && protectedPages.includes(file) && file !== 'storage.html') {
+      location.replace('storage.html');
       return;
+    }
+    if (user && currentProfile?.role === 'umkm' && file === 'fitur.html') {
+      location.replace('storage.html');
+      return;
+    }
+    if (user && (file === 'login.html' || file === 'register.html')) {
+      location.replace(currentProfile?.role === 'umkm' ? 'storage.html' : 'fitur.html');
+      return;
+    }
+    if (user && currentProfile?.role === 'umkm') {
+      document.querySelectorAll('a[href]').forEach(link => {
+        const targetPage = String(link.getAttribute('href') || '').split(/[?#]/, 1)[0].toLowerCase();
+        if (protectedPages.includes(targetPage) && targetPage !== 'storage.html') link.hidden = true;
+      });
+      const nav = document.getElementById('siteNav');
+      if (nav && !nav.querySelector('a[href="storage.html"]')) {
+        const storageLink = document.createElement('a');
+        storageLink.href = 'storage.html';
+        storageLink.textContent = 'Storage Produk';
+        nav.insertBefore(storageLink, nav.querySelector('.site-account') || null);
+      }
     }
     document.querySelectorAll('[data-account-name]').forEach(el => el.textContent = user?.user_metadata?.name || user?.email || 'Akun');
 

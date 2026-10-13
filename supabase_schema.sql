@@ -126,10 +126,10 @@ drop policy if exists "user_data_admin_insert" on public.user_data;
 drop policy if exists "user_data_admin_update" on public.user_data;
 drop policy if exists "user_data_admin_delete" on public.user_data;
 
-create policy "user_data_select_own" on public.user_data for select using (auth.uid() = user_id);
-create policy "user_data_insert_own" on public.user_data for insert with check (auth.uid() = user_id);
-create policy "user_data_update_own" on public.user_data for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "user_data_delete_own" on public.user_data for delete using (auth.uid() = user_id);
+create policy "user_data_select_own" on public.user_data for select using (auth.uid() = user_id and public.is_inventory_admin());
+create policy "user_data_insert_own" on public.user_data for insert with check (auth.uid() = user_id and public.is_inventory_admin());
+create policy "user_data_update_own" on public.user_data for update using (auth.uid() = user_id and public.is_inventory_admin()) with check (auth.uid() = user_id and public.is_inventory_admin());
+create policy "user_data_delete_own" on public.user_data for delete using (auth.uid() = user_id and public.is_inventory_admin());
 create policy "user_data_admin_select" on public.user_data for select using (public.is_inventory_admin());
 create policy "user_data_admin_insert" on public.user_data for insert with check (public.is_inventory_admin());
 create policy "user_data_admin_update" on public.user_data for update using (public.is_inventory_admin()) with check (public.is_inventory_admin());
@@ -228,6 +228,7 @@ alter table public.stock_movements
 alter table public.stock_movements enable row level security;
 drop policy if exists "stock_movements_select_owner_or_admin" on public.stock_movements;
 drop policy if exists "stock_movements_insert_owner_or_admin" on public.stock_movements;
+drop policy if exists "stock_movements_insert_admin_cashier" on public.stock_movements;
 create policy "stock_movements_select_owner_or_admin"
 on public.stock_movements for select to authenticated
 using (
@@ -239,20 +240,9 @@ using (
       and p.owner_code = stock_movements.owner_code
   )
 );
-create policy "stock_movements_insert_owner_or_admin"
+create policy "stock_movements_insert_admin_cashier"
 on public.stock_movements for insert to authenticated
-with check (
-  actor_user_id = auth.uid()
-  and (
-    public.is_inventory_admin()
-    or exists (
-      select 1 from public.user_profiles p
-      where p.user_id = auth.uid()
-        and p.role = 'umkm'
-        and p.owner_code = stock_movements.owner_code
-    )
-  )
-);
+with check (public.is_inventory_admin() and actor_user_id = auth.uid());
 grant select, insert on public.stock_movements to authenticated;
 
 create table if not exists public.owner_settlements (
@@ -317,8 +307,8 @@ begin
   from public.user_profiles p
   where p.user_id = (select auth.uid());
 
-  if caller_role is null then
-    raise exception 'Profil akun tidak ditemukan.';
+  if caller_role is null or caller_role not in ('admin', 'cashier') then
+    raise exception 'Buku Kas hanya dapat diakses oleh Admin/Kasir.';
   end if;
 
   if caller_role in ('admin', 'cashier') then
@@ -363,14 +353,7 @@ begin
     end
   ) as item(value)
   where d.key = 'sales'
-    and (
-      caller_role in ('admin', 'cashier')
-      or (
-        caller_role = 'umkm'
-        and caller_owner_code is not null
-        and coalesce(item.value ->> 'ownerCode', item.value ->> 'owner_code') = caller_owner_code
-      )
-    );
+    and caller_role in ('admin', 'cashier');
 
   return jsonb_build_object('cash', cash_entries, 'sales', sale_items);
 end;
@@ -378,3 +361,224 @@ $$;
 
 revoke all on function public.get_bookkeeping_data() from public, anon;
 grant execute on function public.get_bookkeeping_data() to authenticated;
+
+-- UMKM accounts can read only products assigned to their profile owner code.
+create or replace function public.get_owner_storage_products()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  caller_role text;
+  caller_owner_code text;
+  owner_products jsonb;
+begin
+  select p.role, p.owner_code
+    into caller_role, caller_owner_code
+  from public.user_profiles p
+  where p.user_id = (select auth.uid());
+
+  if caller_role is distinct from 'umkm' or caller_owner_code is null then
+    raise exception 'Fungsi ini hanya tersedia untuk akun UMKM.';
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      product.value
+      order by d.user_id, product.ordinality
+    ),
+    '[]'::jsonb
+  )
+  into owner_products
+  from public.user_data d
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) with ordinality as product(value, ordinality)
+  where d.key = 'products'
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code;
+
+  return jsonb_build_object('products', owner_products);
+end;
+$$;
+
+revoke all on function public.get_owner_storage_products() from public, anon;
+grant execute on function public.get_owner_storage_products() to authenticated;
+
+-- UMKM accounts may update only the ingredient array of their own products.
+create or replace function public.update_owner_product_ingredients(
+  p_product_id text,
+  p_ingredients jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_role text;
+  caller_owner_code text;
+  matching_products integer;
+  updated_product jsonb;
+begin
+  select p.role, p.owner_code
+    into caller_role, caller_owner_code
+  from public.user_profiles p
+  where p.user_id = (select auth.uid());
+
+  if caller_role is distinct from 'umkm' or caller_owner_code is null then
+    raise exception 'Fungsi ini hanya tersedia untuk akun UMKM.';
+  end if;
+
+  if p_product_id is null or p_product_id = ''
+    or p_ingredients is null
+    or jsonb_typeof(p_ingredients) is distinct from 'array'
+  then
+    raise exception 'Data ingredient tidak valid.';
+  end if;
+
+  if jsonb_array_length(p_ingredients) > 100
+    or exists (
+      select 1
+      from jsonb_array_elements(p_ingredients) as ingredient(value)
+      where jsonb_typeof(ingredient.value) <> 'object'
+        or nullif(trim(ingredient.value ->> 'name'), '') is null
+    )
+  then
+    raise exception 'Data ingredient tidak valid.';
+  end if;
+
+  select count(*)
+    into matching_products
+  from public.user_data d
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) as product(value)
+  where d.key = 'products'
+    and product.value ->> 'id' = p_product_id
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code;
+
+  if matching_products <> 1 then
+    raise exception 'Produk titipan tidak ditemukan atau tidak unik untuk akun ini.';
+  end if;
+
+  update public.user_data d
+  set value = (
+    select jsonb_agg(
+      case
+        when product.value ->> 'id' = p_product_id
+          and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code
+        then jsonb_set(product.value, '{ingredients}', p_ingredients, true)
+        else product.value
+      end
+      order by product.ordinality
+    )
+    from jsonb_array_elements(d.value) with ordinality as product(value, ordinality)
+  ),
+  updated_at = now()
+  where d.key = 'products'
+    and jsonb_typeof(d.value) = 'array'
+    and exists (
+      select 1
+      from jsonb_array_elements(d.value) as product(value)
+      where product.value ->> 'id' = p_product_id
+        and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code
+    );
+
+  select product.value
+    into updated_product
+  from public.user_data d
+  cross join lateral jsonb_array_elements(d.value) as product(value)
+  where d.key = 'products'
+    and product.value ->> 'id' = p_product_id
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code;
+
+  return jsonb_build_object('product', updated_product);
+end;
+$$;
+
+revoke all on function public.update_owner_product_ingredients(text, jsonb) from public, anon;
+grant execute on function public.update_owner_product_ingredients(text, jsonb) to authenticated;
+
+-- Reset consignment stock once daily; the stored timezone is UTC, so 17:00 UTC = 01:00 WITA.
+create or replace function public.reset_consignment_stock_daily()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  reset_movements integer;
+begin
+  insert into public.stock_movements (
+    product_id, product_code, product_name, owner_code, owner_name,
+    movement_type, quantity, occurred_at, note, actor_user_id
+  )
+  select
+    product.value ->> 'id',
+    coalesce(product.value ->> 'code', product.value ->> 'productCode', ''),
+    coalesce(product.value ->> 'name', ''),
+    coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code'),
+    coalesce(product.value ->> 'owner', product.value ->> 'owner_name', ''),
+    'stock_out',
+    (product.value ->> 'stock')::numeric,
+    now(),
+    'Reset stok harian otomatis pukul 01.00 WITA',
+    d.user_id
+  from public.user_data d
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) as product(value)
+  where d.key = 'products'
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
+    and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
+    and (product.value ->> 'stock')::numeric > 0;
+
+  get diagnostics reset_movements = row_count;
+
+  update public.user_data d
+  set value = (
+    select jsonb_agg(
+      case
+        when coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
+          and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
+          and (product.value ->> 'stock')::numeric > 0
+        then jsonb_set(product.value, '{stock}', '0'::jsonb, true)
+        else product.value
+      end
+      order by product.ordinality
+    )
+    from jsonb_array_elements(d.value) with ordinality as product(value, ordinality)
+  ),
+  updated_at = now()
+  where d.key = 'products'
+    and jsonb_typeof(d.value) = 'array'
+    and exists (
+      select 1
+      from jsonb_array_elements(d.value) as product(value)
+      where coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
+        and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
+        and (product.value ->> 'stock')::numeric > 0
+    );
+
+  return reset_movements;
+end;
+$$;
+
+revoke all on function public.reset_consignment_stock_daily() from public, anon, authenticated;
+
+create extension if not exists pg_cron;
+do $$
+begin
+  perform cron.unschedule(jobid)
+  from cron.job
+  where jobname = 'reset-consignment-stock-wita';
+
+  perform cron.schedule(
+    'reset-consignment-stock-wita',
+    '0 17 * * *',
+    'select public.reset_consignment_stock_daily();'
+  );
+end;
+$$;

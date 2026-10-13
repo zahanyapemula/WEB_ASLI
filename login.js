@@ -19,6 +19,7 @@
     const raw = String(err?.message || err || '').trim();
     const low = raw.toLowerCase();
     if (low.includes('invalid login credentials')) return 'Email atau password salah.';
+    if (low.includes('role akun')) return raw;
     if (low.includes('email not confirmed')) return 'Email belum dikonfirmasi. Cek inbox email kamu.';
     if (low.includes('failed to fetch') || low.includes('network')) return 'Tidak dapat terhubung ke Supabase. Periksa internet dan jalankan lewat Live Server.';
     if (low.includes('invalid api key') || low.includes('apikey')) return 'Kunci Supabase tidak valid. Periksa konfigurasi auth.js.';
@@ -32,7 +33,9 @@
       await KasirAuth.ready;
       await KasirAuth.signIn(email.value, password.value);
       const requestedTarget = sessionStorage.getItem('kasirTokoAfterLogin') || 'fitur.html';
-      const target = /^[a-z0-9-]+\.html(?:\?[a-z0-9=&_%.-]*)?$/i.test(requestedTarget) ? requestedTarget : 'fitur.html';
+      const target = KasirAuth.isUmkm
+        ? 'storage.html'
+        : (/^[a-z0-9-]+\.html(?:\?[a-z0-9=&_%.-]*)?$/i.test(requestedTarget) ? requestedTarget : 'fitur.html');
       sessionStorage.removeItem('kasirTokoAfterLogin');
       showStatus('Login berhasil.', true);
       setTimeout(() => { location.href = target; }, 400);
