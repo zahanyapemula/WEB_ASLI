@@ -57,3 +57,4 @@ STORAGE / INVENTORI PRODUK
 - Role dan kode owner tersimpan di public.user_profiles. Produk masih disimpan sebagai JSON per user_id pada public.user_data, dengan RLS server-side: UMKM hanya dapat mengakses baris akun sendiri; Admin/Kasir dapat mengakses semua baris produk. Kode `_tenantUserId` hanya metadata UI untuk menyimpan perubahan admin kembali ke akun asal dan tidak dikirim sebagai klaim keamanan.
 - Role awal semua akun adalah umkm. Promosi ke admin hanya dapat dilakukan secara manual di Supabase SQL Editor; akun dengan role cashier dapat melihat/mengelola seluruh produk tetapi tidak dapat mengubah role akun lain.
 - Ringkasan “Stok titipan awal” saat ini estimasi dari sisa stok sekarang + unit terjual pada tanggal terpilih. Untuk angka historis akurat, catat setiap penambahan/pengurangan stok sebagai mutasi stok dan hitung saldo dari ledger.
+
