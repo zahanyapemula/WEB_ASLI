@@ -72,7 +72,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .owner-picker-options[hidden]{display:none}
 .owner-picker-options button{display:block;width:100%;padding:9px 10px;border:0;border-radius:7px;background:#fff;text-align:left;color:var(--dark);font:600 12px var(--font);cursor:pointer}
 .owner-picker-options button:hover,.owner-picker-options button:focus{background:var(--soft);outline:none}
-.barcode{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:7px;text-align:center;min-height:102px;display:flex;flex-direction:column;justify-content:center}.barcode svg{display:block;width:100%;height:98px;max-width:100%;margin:0 auto}.barcode svg text{font-family:monospace!important;font-size:11px!important;fill:#111!important}
+.barcode{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:7px;text-align:center;min-height:106px;display:flex;flex-direction:column;justify-content:center}.barcode svg{display:block;width:100%;height:102px;max-width:100%;margin:0 auto}.barcode svg text{fill:#111!important}.barcode svg .barcode-number{font-family:monospace!important;font-size:13px!important}.barcode svg .barcode-price{font-family:sans-serif!important;font-size:15px!important}
 .code{margin-top:5px;padding:6px;border-radius:7px;background:var(--soft2);font:700 10px var(--mono);word-break:break-all}
 .actions{display:flex;gap:6px;margin-top:9px}.actions .btn{flex:1}
 .badge{display:inline-block;border-radius:99px;padding:4px 8px;font-size:9px;font-weight:800}.good{background:var(--soft);color:#31823b}.warn{background:var(--yellow2);color:#806d00}.danger-badge{background:var(--redsoft);color:#c53d38}
@@ -354,12 +354,12 @@ function renderEAN13(svg, value, price){
   let rects=[];
   for(let i=0;i<bits.length;i++) if(bits[i]==="1") rects.push(`<rect x="${quiet+i*module}" y="4" width="${module}" height="${barH}"/>`);
   const total=quiet*2+bits.length*module;
-  svg.setAttribute("viewBox",`0 0 ${total} 98`);
+  svg.setAttribute("viewBox",`0 0 ${total} 102`);
   svg.setAttribute("preserveAspectRatio","xMidYMid meet");
-  svg.setAttribute("width","100%"); svg.setAttribute("height","98");
+  svg.setAttribute("width","100%"); svg.setAttribute("height","102");
   const priceLabel=`Rp ${Number(price||0).toLocaleString("id-ID")}`;
   svg.setAttribute("role","img"); svg.setAttribute("aria-label",`EAN-13 ${value}, harga ${priceLabel}`);
-  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="98" fill="#fff"/><g fill="#111">${rects.join("")}</g><text x="${total/2}" y="75" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#111">${value}</text><text x="${total/2}" y="94" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#111">${priceLabel}</text>`;
+  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="102" fill="#fff"/><g fill="#111">${rects.join("")}</g><text class="barcode-number" x="${total/2}" y="76" text-anchor="middle" font-weight="700">${value}</text><text class="barcode-price" x="${total/2}" y="99" text-anchor="middle" font-weight="700">${priceLabel}</text>`;
 }
 
 async function addProduct(){
