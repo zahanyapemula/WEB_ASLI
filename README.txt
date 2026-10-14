@@ -5,21 +5,16 @@ WEB PKM - SUPABASE EMAIL/PASSWORD (PERBAIKAN)
 3. Jika ingin langsung masuk setelah daftar, matikan Confirm email. Jika tetap aktif, pengguna harus mengklik email konfirmasi.
 4. Website memakai Supabase JS Client resmi dari CDN dan Publishable key di auth.js.
 5. Login dan daftar menggunakan EMAIL + PASSWORD. Tidak menggunakan Google.
-6. Data aplikasi disimpan per user_id pada public.user_data; Row Level Security membatasi akun UMKM dan memberi Admin/Kasir akses lintas akun sesuai role database.
+6. Data aplikasi disimpan per user_id pada public.user_data. Role aplikasi yang digunakan: Owner (role database `cashier`) dan UMKM.
 7. Jalankan website lewat Live Server atau hosting HTTPS, bukan file://.
 8. Jika pendaftaran gagal, halaman sekarang menampilkan pesan error Supabase yang lebih spesifik.
 
 MENGAKTIFKAN LOGIN DAN ROLE
-- Jalankan ulang supabase_schema.sql setelah update ini agar tabel user_profiles, role default UMKM, dan policy Admin/Kasir dibuat.
+- Database yang sudah ada dibiarkan apa adanya; jangan jalankan perubahan skema untuk alur kode UMKM ini.
 - Login, daftar, pemulihan sesi, logout, dan guard halaman fitur memakai Supabase Auth aktif.
-- Semua akun lama yang belum punya profil dibuat sebagai role umkm. Akun baru juga selalu mendapat role umkm; role tidak dapat dipilih dari form pendaftaran.
-- Setelah akun Admin/Kasir dibuat dan email-nya dikonfirmasi, promosikan secara manual di Supabase SQL Editor:
-  update public.user_profiles p
-  set role = 'admin'
-  from auth.users u
-  where p.user_id = u.id and lower(u.email) = lower('EMAIL_ADMIN');
-  Gunakan role 'cashier' untuk Kasir Utama. Pastikan email sudah benar sebelum menjalankan perintah.
-- Kebijakan RLS membolehkan akun UMKM membaca/mengubah hanya baris user_data miliknya. Role admin/cashier dapat membaca/mengelola seluruh baris. Storage menggabungkan daftar produk untuk Admin/Kasir dan menyimpan perubahan kembali ke akun asal tiap produk.
+- Pendaftaran akun menghasilkan role UMKM sesuai skema yang sekarang. Owner memakai akun yang sudah memiliki role `cashier`; role tidak dipilih dari form pendaftaran.
+- Database saat ini menghasilkan kode UMKM sendiri saat akun dibuat. Karena itu, kode yang dibuat Kasir pada Produk belum dapat dipakai untuk menghubungkan akun UMKM tanpa perubahan database; fitur klaim kode ditunda.
+- Owner dengan role `cashier` mengelola produk dan kasir. Akun UMKM memantau produk sesuai pembatasan akses di database yang ada.
 - Jalankan website melalui HTTPS/localhost. Tanpa menjalankan migrasi SQL terbaru, halaman terlindungi menolak akses dan login akan menampilkan error profil.
 
 PENTING:
@@ -51,10 +46,9 @@ UPDATE PERBAIKAN FITUR + NAVBAR (30 September 2026)
 
 STORAGE / INVENTORI PRODUK
 - storage.html menyimpan kode owner empat digit, menyediakan filter owner, mengelompokkan produk menurut kode owner, dan menampilkan rekap penjualan per tanggal.
-- Form Produk menerima nama owner UMKM dari daftar akun yang sudah terdaftar; Storage memakai dropdown akun owner yang sama agar tidak perlu mengetik ulang.
+- Form Produk pada akun Owner/Kasir menerima owner dari daftar akun atau nama UMKM baru yang diketik manual. Klik Generate kode untuk membuat kode UMKM empat digit yang belum digunakan.
+- Kode dari Kasir saat ini hanya menjadi identitas owner pada produk; kode itu belum menghubungkan produk ke akun UMKM saat pendaftaran karena database tidak diubah.
 - Kode Produk tetap mengikuti generator yang ada di produk.html; login/RBAC tidak mengubah format atau mengganti kode produk.
 - kasir.js menyimpan snapshot owner dan Kode UMKM pada item transaksi baru agar transaksi berikutnya tetap dapat direkap menurut owner.
-- Role dan kode owner tersimpan di public.user_profiles. Produk masih disimpan sebagai JSON per user_id pada public.user_data, dengan RLS server-side: UMKM hanya dapat mengakses baris akun sendiri; Admin/Kasir dapat mengakses semua baris produk. Kode `_tenantUserId` hanya metadata UI untuk menyimpan perubahan admin kembali ke akun asal dan tidak dikirim sebagai klaim keamanan.
-- Role awal semua akun adalah umkm. Promosi ke admin hanya dapat dilakukan secara manual di Supabase SQL Editor; akun dengan role cashier dapat melihat/mengelola seluruh produk tetapi tidak dapat mengubah role akun lain.
+- Role dan kode owner tersimpan di public.user_profiles. Produk masih disimpan sebagai JSON per user_id pada public.user_data. Owner memakai role database `cashier`; UMKM memakai role `umkm`. Skema dan kebijakan database yang ada tidak diubah.
 - Ringkasan “Stok titipan awal” saat ini estimasi dari sisa stok sekarang + unit terjual pada tanggal terpilih. Untuk angka historis akurat, catat setiap penambahan/pengurangan stok sebagai mutasi stok dan hitung saldo dari ledger.
-

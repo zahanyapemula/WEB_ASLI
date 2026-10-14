@@ -11,10 +11,12 @@
 <main class="register-page">
   <section class="register-card">
     <a class="brand" href="index.html"><img src="logo.png" alt="Web PKM"><span>Web PKM</span></a>
-    <div class="heading"><span class="eyebrow">AKUN BARU</span><h1>Daftar sekarang</h1><p>Buat akun. Data produk, transaksi, stok, dan buku kas akan tersimpan terpisah untuk akun ini.</p></div>
+    <div class="heading"><span class="eyebrow">AKUN UMKM</span><h1>Daftar sekarang</h1><p>Masukkan kode UMKM dari Owner/Kasir agar produk titipan yang sudah didaftarkan dapat dipantau setelah login.</p></div>
     <form id="registerForm" novalidate>
       <label>Nama lengkap<input id="fullName" type="text" autocomplete="name" placeholder="Masukkan nama lengkap"></label>
       <small id="nameError" class="error"></small>
+      <label>Kode UMKM dari Owner/Kasir<input id="ownerCode" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" placeholder="Masukkan 4 digit kode" required></label>
+      <small id="ownerCodeError" class="error"></small>
       <label>Email<input id="email" type="email" autocomplete="email" placeholder="Masukkan email aktif"></label>
       <small id="emailError" class="error"></small>
       <label>Password<input id="password" type="password" autocomplete="new-password" placeholder="Minimal 6 karakter"></label>

@@ -67,11 +67,12 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .owner-picker-control{display:flex;gap:6px}
 .owner-picker-control input{min-width:0}
 .owner-picker-toggle{flex:0 0 auto;padding:8px 12px}
+.owner-code-control{display:flex;gap:7px}.owner-code-control input{min-width:0}.owner-code-control .btn{flex:0 0 auto}
 .owner-picker-options{position:absolute;z-index:20;top:calc(100% + 5px);left:0;right:0;max-height:220px;overflow:auto;padding:5px;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}
 .owner-picker-options[hidden]{display:none}
 .owner-picker-options button{display:block;width:100%;padding:9px 10px;border:0;border-radius:7px;background:#fff;text-align:left;color:var(--dark);font:600 12px var(--font);cursor:pointer}
 .owner-picker-options button:hover,.owner-picker-options button:focus{background:var(--soft);outline:none}
-.barcode{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:7px;text-align:center;min-height:104px;display:flex;flex-direction:column;justify-content:center}.barcode svg{display:block;width:100%;height:100px;max-width:100%;margin:0 auto}.barcode svg text{font-family:monospace!important;fill:#111!important}
+.barcode{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:7px;text-align:center;min-height:82px;display:flex;flex-direction:column;justify-content:center}.barcode svg{display:block;width:100%;height:78px;max-width:100%;margin:0 auto}.barcode svg text{font-family:monospace!important;font-size:11px!important;fill:#111!important}
 .code{margin-top:5px;padding:6px;border-radius:7px;background:var(--soft2);font:700 10px var(--mono);word-break:break-all}
 .actions{display:flex;gap:6px;margin-top:9px}.actions .btn{flex:1}
 .badge{display:inline-block;border-radius:99px;padding:4px 8px;font-size:9px;font-weight:800}.good{background:var(--soft);color:#31823b}.warn{background:var(--yellow2);color:#806d00}.danger-badge{background:var(--redsoft);color:#c53d38}
@@ -105,7 +106,8 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Nama Produk</label><input id="name" placeholder="Contoh: Kopi Susu"></div>
 <div><label class="label">Harga Jual (Rp)</label><input id="price" type="number" min="1" placeholder="15000"></div>
 <div><label class="label">Harga Modal / HPP per unit (Rp)</label><input id="cost" type="number" min="0" placeholder="8000"></div>
-<div class="full"><label class="label" for="productOwner">Pemilik / Penitip Barang</label><div class="owner-picker"><div class="owner-picker-control"><input id="productOwner" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ownerSuggestions" placeholder="Pilih akun UMKM terdaftar" autocomplete="off"><button id="ownerPickerToggle" type="button" class="btn secondary owner-picker-toggle" aria-label="Tampilkan daftar owner" aria-expanded="false">▾</button></div><div id="ownerSuggestions" class="owner-picker-options" role="listbox" hidden></div></div><div class="small" style="margin-top:5px">Pilih akun UMKM terdaftar agar produk muncul di Storage akun owner tersebut.</div></div>
+<div class="full"><label class="label" for="productOwner">Pemilik / Penitip Barang</label><div class="owner-picker"><div class="owner-picker-control"><input id="productOwner" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ownerSuggestions" placeholder="Pilih atau ketik nama UMKM" autocomplete="off"><button id="ownerPickerToggle" type="button" class="btn secondary owner-picker-toggle" aria-label="Tampilkan daftar owner" aria-expanded="false">▾</button></div><div id="ownerSuggestions" class="owner-picker-options" role="listbox" hidden></div></div><div class="small" style="margin-top:5px">Pilih owner terdaftar atau ketik nama UMKM baru. Buat kode UMKM agar pemilik dapat menghubungkan produk ini ke akunnya nanti.</div></div>
+<div class="full"><label class="label" for="ownerCodeInput">Kode UMKM</label><div class="owner-code-control"><input id="ownerCodeInput" inputmode="numeric" maxlength="4" readonly placeholder="Generate kode saat menambahkan produk" aria-describedby="ownerCodeHelp"><button id="generateOwnerCode" type="button" class="btn secondary">Generate kode</button></div><div id="ownerCodeHelp" class="small" style="margin-top:5px">Berikan kode ini kepada UMKM. Kode digunakan saat daftar akun untuk melihat produk titipannya.</div></div>
 <div><label class="label">Kode Produk</label><input id="productCode" readonly placeholder="Otomatis saat produk dibuat"><div class="small" style="margin-top:5px">Kode dibuat otomatis dan unik untuk setiap produk.</div></div>
 <div><label class="label" for="barcodeInput">Kode Barcode</label><div class="barcode-input-row"><input id="barcodeInput" inputmode="numeric" autocomplete="off" placeholder="Kosongkan untuk otomatis"><button id="generateBarcode" type="button" class="btn barcode-generate">▦<span>Generate</span></button></div></div>
 <div class="full"><div class="note" style="margin:0 0 9px">🏷️ Klik Generate untuk membuat barcode EAN-13 atau kosongkan agar dibuat otomatis saat produk disimpan.</div><button id="add" class="btn primary" style="width:100%">＋ Simpan Produk</button></div>
@@ -173,6 +175,8 @@ if(KasirAuth.isUmkm){
  $("productOwner").value=KasirAuth.profile?.owner_name||"";
  $("productOwner").readOnly=true;
  $("ownerPickerToggle").hidden=true;
+ $("ownerCodeInput").value=KasirAuth.profile?.owner_code||"";
+ $("generateOwnerCode").hidden=true;
 }
 function ownerCodeFor(name){
  const clean=cleanOwner(name).toLowerCase();
@@ -183,13 +187,31 @@ function ownerCodeFor(name){
  const existing=owners.find(owner=>cleanOwner(owner.name).toLowerCase()===clean)
   ||products.find(product=>cleanOwner(product.owner).toLowerCase()===clean);
  if(existing?.code||existing?.ownerCode)return existing.code||existing.ownerCode;
- let code;
- do{code=randomDigits(4)}while(owners.some(owner=>String(owner.code)===code)||products.some(product=>String(product.ownerCode)===code));
- return code;
+ return "";
 }
-function registerOwner(name){
+function generateOwnerCode(name){
+ if(!KasirAuth.isUmkm&&ownerAccountsError){
+  throw new Error(`Daftar kode UMKM gagal dimuat: ${ownerAccountsError.message}. Coba muat ulang halaman.`);
+ }
+ const existingCode=ownerCodeFor(name);
+ if(existingCode)return String(existingCode);
+ const usedCodes=new Set([
+  ...ownerAccounts.map(owner=>String(owner.owner_code||"")),
+  ...owners.map(owner=>String(owner.code||owner.ownerCode||"")),
+  ...products.map(product=>String(product.ownerCode||product.owner_code||""))
+ ]);
+ const availableCodes=Array.from({length:10000},(_,value)=>String(value).padStart(4,"0"))
+  .filter(code=>!usedCodes.has(code));
+ if(!availableCodes.length)throw new Error("Semua kode UMKM empat digit sudah digunakan.");
+ return availableCodes[Math.floor(Math.random()*availableCodes.length)];
+}
+function registerOwner(name,code){
   if(!KasirAuth.current()){
     toast("Sesi akun belum aktif. Silakan masuk kembali sebelum menambah produk.");
+    return null;
+  }
+  if(!KasirAuth.isUmkm&&ownerAccountsError){
+    toast(`Daftar akun UMKM gagal dimuat: ${ownerAccountsError.message}. Coba muat ulang halaman.`);
     return null;
   }
   const ownerName=KasirAuth.isUmkm
@@ -197,23 +219,29 @@ function registerOwner(name){
     : cleanOwner(name);
   if(!ownerName){toast("Masukkan nama pemilik / penitip barang.");$("productOwner").focus();return null;}
   const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===ownerName.toLowerCase());
-  if(!KasirAuth.isUmkm&&!account){
-    const reason=ownerAccountsError
-      ?`Daftar akun UMKM gagal dimuat: ${ownerAccountsError.message}`
-      :"Pilih nama UMKM dari daftar akun terdaftar. Nama owner biasa tidak terhubung ke akun UMKM.";
-    toast(reason);
-    $("productOwner").focus();
+  const ownerCode=String(account?.owner_code|| (KasirAuth.isUmkm?KasirAuth.profile?.owner_code:"") || code || "").trim();
+  if(!/^\d{4}$/.test(ownerCode)){
+    toast("Generate kode UMKM terlebih dahulu sebelum menyimpan produk.");
+    $("generateOwnerCode").focus();
     return null;
   }
+  const conflictingOwner=ownerAccounts.find(item=>String(item.owner_code)===ownerCode&&cleanOwner(item.owner_name).toLowerCase()!==ownerName.toLowerCase())
+    ||owners.find(item=>String(item.code||item.ownerCode)===ownerCode&&cleanOwner(item.name).toLowerCase()!==ownerName.toLowerCase())
+    ||products.find(item=>String(item.ownerCode||item.owner_code)===ownerCode&&cleanOwner(item.owner).toLowerCase()!==ownerName.toLowerCase());
+  if(conflictingOwner){toast("Kode UMKM ini sudah dipakai owner lain. Generate kode baru.");$("generateOwnerCode").focus();return null;}
   const owner={
     name:account?.owner_name||ownerName,
-    code:account?.owner_code||ownerCodeFor(ownerName),
+    code:ownerCode,
     userId:account?.user_id||KasirAuth.current()?.id||null
   };
   const existingIndex=owners.findIndex(item=>cleanOwner(item.name).toLowerCase()===cleanOwner(owner.name).toLowerCase());
   if(existingIndex>=0)owners[existingIndex]=owner;else owners.push(owner);
   save(STORE.owners,owners);
   return owner;
+}
+function syncOwnerCodeFromName(){
+ const ownerName=cleanOwner($("productOwner").value);
+ $("ownerCodeInput").value=ownerName?ownerCodeFor(ownerName):"";
 }
 function renderOwnerSuggestions(){
   const names=new Map();
@@ -227,13 +255,20 @@ function renderOwnerSuggestions(){
   options.innerHTML=matches.length?matches.map(name=>`<button type="button" role="option" data-owner="${esc(name)}">${esc(name)}</button>`).join('<div class="small" style="padding:6px 10px">Owner tersimpan di daftar produk lokal</div>'):'<div class="small" style="padding:9px 10px">Belum ada nama cocok. Ketik nama pemilik baru, lalu simpan produk.</div>';
   options.querySelectorAll("[data-owner]").forEach(option=>option.addEventListener("click",()=>{
     $("productOwner").value=option.dataset.owner;
+    syncOwnerCodeFromName();
     closeOwnerSuggestions();
   }));
 }
 function openOwnerSuggestions(){renderOwnerSuggestions();$("ownerSuggestions").hidden=false;$("productOwner").setAttribute("aria-expanded","true");$("ownerPickerToggle").setAttribute("aria-expanded","true")}
 function closeOwnerSuggestions(){$("ownerSuggestions").hidden=true;$("productOwner").setAttribute("aria-expanded","false");$("ownerPickerToggle").setAttribute("aria-expanded","false")}
 $("productOwner").addEventListener("focus",openOwnerSuggestions);
- $("productOwner").addEventListener("input",openOwnerSuggestions);
+ $("productOwner").addEventListener("input",()=>{syncOwnerCodeFromName();openOwnerSuggestions()});
+ $("generateOwnerCode").addEventListener("click",()=>{
+  const ownerName=cleanOwner($("productOwner").value);
+  if(!ownerName){toast("Masukkan nama owner terlebih dahulu.");$("productOwner").focus();return;}
+  try{$("ownerCodeInput").value=generateOwnerCode(ownerName)}
+  catch(error){console.error("Kode UMKM gagal dibuat:",error);toast(error.message)}
+ });
  $("productOwner").addEventListener("keydown",event=>{
   if(event.key==="Escape"){closeOwnerSuggestions();return}
   if(event.key==="ArrowDown"){event.preventDefault();openOwnerSuggestions();$("ownerSuggestions").querySelector("button")?.focus()}
@@ -246,6 +281,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
     owners=load(STORE.owners,[]);
     products=load(STORE.products,[]);
     renderOwnerSuggestions();
+    syncOwnerCodeFromName();
     render();
     if(KasirAuth.isUmkm){
       $("productOwner").value=KasirAuth.profile?.owner_name||"";
@@ -313,7 +349,7 @@ function ensureProductCodes(){
 ensureProductCodes();
 $("productCode").value=genProductCode();
 
-function renderEAN13(svg, value, price){
+function renderEAN13(svg, value){
   value=String(value||"").trim();
   if(!validEAN13(value)){ svg.innerHTML=""; return; }
   const L=["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"];
@@ -327,15 +363,15 @@ function renderEAN13(svg, value, price){
   bits += "01010";
   for(let i=7;i<=12;i++) bits += R[Number(value[i])];
   bits += "101";
-  const module=3; const quiet=12*module; const barH=54;
+  const module=3; const quiet=12*module; const h=68; const barH=54;
   let rects=[];
   for(let i=0;i<bits.length;i++) if(bits[i]==="1") rects.push(`<rect x="${quiet+i*module}" y="4" width="${module}" height="${barH}"/>`);
   const total=quiet*2+bits.length*module;
-  svg.setAttribute("viewBox",`0 0 ${total} 102`);
+  svg.setAttribute("viewBox",`0 0 ${total} 78`);
   svg.setAttribute("preserveAspectRatio","xMidYMid meet");
-  svg.setAttribute("width","100%"); svg.setAttribute("height","102");
-  svg.setAttribute("role","img"); svg.setAttribute("aria-label",`EAN-13 ${value}, harga ${price}`);
-  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="102" fill="#fff"/><g fill="#111">${rects.join("")}</g><text x="${total/2}" y="75" text-anchor="middle" font-size="11" font-weight="700">${value}</text><text x="${total/2}" y="97" text-anchor="middle" font-family="monospace" font-size="16" font-weight="700" fill="#328f46">${price}</text>`;
+  svg.setAttribute("width","100%"); svg.setAttribute("height","78");
+  svg.setAttribute("role","img"); svg.setAttribute("aria-label",`EAN-13 ${value}`);
+  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="78" fill="#fff"/><g fill="#111">${rects.join("")}</g><text x="${total/2}" y="75" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#111">${value}</text>`;
 }
 
 function addProduct(){
@@ -354,7 +390,7 @@ function addProduct(){
  if(scannedBarcode&&barcodeExists(scannedBarcode)){toast("Barcode sudah digunakan oleh produk lain.");$("barcodeInput").focus();return;}
  const code=genProductCode();
  const barcode=scannedBarcode||genEAN13();
- const owner=registerOwner($("productOwner").value);
+ const owner=registerOwner($("productOwner").value,$("ownerCodeInput").value);
  if(!owner)return;
 
  const product={
@@ -384,7 +420,7 @@ function addProduct(){
  
  $("productCode").value=genProductCode();
  render();
- toast(`Produk ${name} berhasil ditambahkan ✓`);
+ toast(`Produk ${name} berhasil ditambahkan · Kode UMKM ${owner.code}`);
 }
 
 $("add").addEventListener("click",addProduct);
@@ -419,7 +455,7 @@ function render(){
   <div class="actions"><button class="btn secondary edit">⚙️ Storage</button><button class="btn secondary copy">📋 Salin</button><button class="btn danger del">🗑️ Hapus</button></div>`;
   $("list").appendChild(d);
   const svg=d.querySelector("svg");
-  renderEAN13(svg,String(p.barcode),rp(p.price));
+  renderEAN13(svg,String(p.barcode));
   d.querySelector(".edit").onclick=()=>location.href="storage.html?product="+encodeURIComponent(p.id);
   d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
   d.querySelector(".del").onclick=()=>{if(confirm("Hapus "+p.name+"?")){products=products.filter(x=>x.id!==p.id);save(STORE.products,products);render()}};
