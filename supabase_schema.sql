@@ -57,12 +57,45 @@ as $$
 declare
   new_code text;
 begin
-  loop
-    new_code := lpad((floor(random() * 10000))::integer::text, 4, '0');
-    exit when not exists (
+  new_code := nullif(trim(new.raw_user_meta_data ->> 'owner_code'), '');
+  if new_code is not null then
+    if new_code !~ '^[0-9]{4}$' then
+      raise exception 'Kode UMKM harus terdiri dari 4 angka.';
+    end if;
+
+    if exists (
       select 1 from public.user_profiles where owner_code = new_code
-    );
-  end loop;
+    ) then
+      raise exception 'Kode UMKM sudah terhubung ke akun UMKM lain.';
+    end if;
+
+    if not exists (
+      select 1
+      from public.user_data d
+      cross join lateral jsonb_array_elements(
+        case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+      ) as product(value)
+      where d.key = 'products'
+        and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = new_code
+    ) then
+      raise exception 'Kode UMKM tidak ditemukan. Minta Owner/Kasir memastikan produk dengan kode tersebut sudah disimpan.';
+    end if;
+  else
+    loop
+      new_code := lpad((floor(random() * 10000))::integer::text, 4, '0');
+      exit when not exists (
+        select 1 from public.user_profiles where owner_code = new_code
+      ) and not exists (
+        select 1
+        from public.user_data d
+        cross join lateral jsonb_array_elements(
+          case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+        ) as product(value)
+        where d.key = 'products'
+          and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = new_code
+      );
+    end loop;
+  end if;
 
   insert into public.user_profiles (user_id, role, owner_name, owner_code)
   values (
@@ -99,6 +132,14 @@ begin
       new_code := lpad((floor(random() * 10000))::integer::text, 4, '0');
       exit when not exists (
         select 1 from public.user_profiles where owner_code = new_code
+      ) and not exists (
+        select 1
+        from public.user_data d
+        cross join lateral jsonb_array_elements(
+          case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+        ) as product(value)
+        where d.key = 'products'
+          and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = new_code
       );
     end loop;
 

@@ -338,12 +338,12 @@
     return currentUser;
   }
 
-  async function signUp(email, password, name) {
+  async function signUp(email, password, name, ownerCode) {
     const cleanEmail = email.trim().toLowerCase();
     const { data, error } = await client.auth.signUp({
       email: cleanEmail,
       password,
-      options: { data: { name: name.trim() } }
+      options: { data: { name: name.trim(), owner_code: String(ownerCode || '').trim() } }
     });
     if (error) throw error;
     session = data.session;

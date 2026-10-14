@@ -1,6 +1,6 @@
 WEB PKM - SUPABASE EMAIL/PASSWORD (PERBAIKAN)
 
-1. Jalankan supabase_schema.sql di Supabase Dashboard -> SQL Editor. Jalankan ulang setiap ada perubahan skema.
+1. Jalankan supabase_schema.sql di Supabase Dashboard -> SQL Editor saat instalasi, lalu jalankan ulang setelah memperbarui fungsi database di file tersebut.
 2. Supabase -> Authentication -> Providers -> Email: pastikan Email aktif.
 3. Jika ingin langsung masuk setelah daftar, matikan Confirm email. Jika tetap aktif, pengguna harus mengklik email konfirmasi.
 4. Website memakai Supabase JS Client resmi dari CDN dan Publishable key di auth.js.
@@ -10,10 +10,11 @@ WEB PKM - SUPABASE EMAIL/PASSWORD (PERBAIKAN)
 8. Jika pendaftaran gagal, halaman sekarang menampilkan pesan error Supabase yang lebih spesifik.
 
 MENGAKTIFKAN LOGIN DAN ROLE
-- Database yang sudah ada dibiarkan apa adanya; jangan jalankan perubahan skema untuk alur kode UMKM ini.
+- Setelah perubahan ini, jalankan ulang supabase_schema.sql agar fungsi pendaftaran memvalidasi dan menghubungkan kode UMKM ke produk titipan.
 - Login, daftar, pemulihan sesi, logout, dan guard halaman fitur memakai Supabase Auth aktif.
 - Pendaftaran akun menghasilkan role UMKM sesuai skema yang sekarang. Owner memakai akun yang sudah memiliki role `cashier`; role tidak dipilih dari form pendaftaran.
-- Database saat ini menghasilkan kode UMKM sendiri saat akun dibuat. Karena itu, kode yang dibuat Kasir pada Produk belum dapat dipakai untuk menghubungkan akun UMKM tanpa perubahan database; fitur klaim kode ditunda.
+- Owner/Kasir membuat kode UMKM dari halaman Produk. UMKM wajib memasukkan kode tersebut saat daftar; fungsi database memeriksa produk dengan kode itu dan menolak kode yang tidak ditemukan atau sudah terhubung ke akun lain.
+- Setelah akun dibuat, role tetap UMKM dan Storage mengambil semua produk titipan berdasarkan kode UMKM, termasuk produk yang sudah terdaftar sebelum akun dibuat.
 - Owner dengan role `cashier` mengelola produk dan kasir. Akun UMKM memantau produk sesuai pembatasan akses di database yang ada.
 - Jalankan website melalui HTTPS/localhost. Tanpa menjalankan migrasi SQL terbaru, halaman terlindungi menolak akses dan login akan menampilkan error profil.
 
@@ -47,8 +48,8 @@ UPDATE PERBAIKAN FITUR + NAVBAR (30 September 2026)
 STORAGE / INVENTORI PRODUK
 - storage.html menyimpan kode owner empat digit, menyediakan filter owner, mengelompokkan produk menurut kode owner, dan menampilkan rekap penjualan per tanggal.
 - Form Produk pada akun Owner/Kasir menerima owner dari daftar akun atau nama UMKM baru yang diketik manual. Klik Generate kode untuk membuat kode UMKM empat digit yang belum digunakan.
-- Kode dari Kasir saat ini hanya menjadi identitas owner pada produk; kode itu belum menghubungkan produk ke akun UMKM saat pendaftaran karena database tidak diubah.
+- Kode dari Kasir tersimpan bersama produk. Saat UMKM mendaftar dengan kode tersebut, profil UMKM memakai kode yang sama sehingga Storage dapat menampilkan produk lama dan produk berikutnya.
 - Kode Produk tetap mengikuti generator yang ada di produk.html; login/RBAC tidak mengubah format atau mengganti kode produk.
 - kasir.js menyimpan snapshot owner dan Kode UMKM pada item transaksi baru agar transaksi berikutnya tetap dapat direkap menurut owner.
-- Role dan kode owner tersimpan di public.user_profiles. Produk masih disimpan sebagai JSON per user_id pada public.user_data. Owner memakai role database `cashier`; UMKM memakai role `umkm`. Skema dan kebijakan database yang ada tidak diubah.
+- Produk tetap disimpan sebagai JSON per user_id pada public.user_data. Owner menggunakan role database `cashier` dan UMKM menggunakan role `umkm`; perubahan database hanya memperbarui fungsi pembuatan profil untuk menerima kode klaim dan tidak menambah atau mengganti role.
 - Ringkasan “Stok titipan awal” saat ini estimasi dari sisa stok sekarang + unit terjual pada tanggal terpilih. Untuk angka historis akurat, catat setiap penambahan/pengurangan stok sebagai mutasi stok dan hitung saldo dari ledger.
