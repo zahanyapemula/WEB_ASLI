@@ -94,7 +94,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;margin-bottom:12px"><input id="search" placeholder="Cari transaksi..."><select id="month"><option value="all">Semua Bulan</option></select></div><div class="table"><table><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan UMKM</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table"><table><thead><tr><th>Kode / UMKM</th><th>Barang Dititip (unit)</th><th>Laku (unit)</th><th>Sisa / Tidak Laku (unit)</th><th>Pendapatan UMKM</th><th>Status Pembayaran</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada data titipan atau penjualan pada tanggal ini.</div></div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan UMKM</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table"><table><thead><tr><th>Kode / UMKM</th><th>Barang Dititip (unit)</th><th>Laku (unit)</th><th>Sisa / Tidak Laku (unit)</th><th>Produk Terjual</th><th>Total Harus Dibayar</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada data titipan atau penjualan pada tanggal ini.</div></div></div>
 </div>
 <div>
 <div class="card"><div class="title"><h3>Rekap Bulanan</h3><span class="tag">Otomatis</span></div><div id="months" class="months"></div><div id="monthEmpty" class="empty">Belum ada data.</div></div>
@@ -122,7 +122,7 @@ const fmtDate=d=>new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Makassar",day:"
 let cash=load(STORE.cash,[]);
 const isManager=["admin","cashier"].includes(KasirAuth.role);
 let bookkeeping={cash:[],sales:[]};
-let stockMovements=[],settlements=[],ownerAccounts=[],inventoryProducts=[];
+let stockMovements=[],ownerAccounts=[],inventoryProducts=[];
 let recapLoadErrors=[];
 $("date").value=today();
  $("recapDate").value=today();
@@ -170,7 +170,7 @@ function renderConsignmentRecap(){
  const ensureOwner=(code,name)=>{
   code=String(code||"");
   if(!/^\d{4}$/.test(code))return null;
-  if(!totals.has(code))totals.set(code,{code,name:name||`UMKM ${code}`,deposited:0,sold:0,revenue:0,remaining:0,paid:null});
+  if(!totals.has(code))totals.set(code,{code,name:name||`UMKM ${code}`,deposited:0,sold:0,revenue:0,remaining:0,products:new Map()});
   else if(name)totals.get(code).name=name;
   return totals.get(code);
  };
@@ -179,8 +179,16 @@ function renderConsignmentRecap(){
    if(dateInWita(item.date)!==day)return;
   const total=ensureOwner(item.owner_code,item.owner_name);
   if(!total)return;
-  total.sold+=Number(item.qty)||0;
-  total.revenue+=Number(item.total)||0;
+  const quantity=Number(item.qty)||0;
+  const productRevenue=Number(item.total)||Number(item.price||0)*quantity;
+  const productName=String(item.name||"Produk tanpa nama");
+  const productKey=String(item.barcode||item.code||productName);
+  const product=total.products.get(productKey)||{name:productName,quantity:0,revenue:0};
+  product.quantity+=quantity;
+  product.revenue+=productRevenue;
+  total.products.set(productKey,product);
+  total.sold+=quantity;
+  total.revenue+=productRevenue;
  });
  stockMovements.forEach(movement=>{
   const total=ensureOwner(movement.owner_code,movement.owner_name);
@@ -198,16 +206,9 @@ function renderConsignmentRecap(){
    if(total)total.remaining+=Math.max(0,Number(product.stock)||0);
   });
  }
- settlements.forEach(item=>{
-  const total=totals.get(String(item.owner_code||""));
-  if(total&&item.settlement_date===day)total.paid=item;
- });
  const rows=[...totals.values()].filter(total=>!filter||total.code===filter).sort((a,b)=>a.code.localeCompare(b.code)).map(total=>{
-  const settlement=total.paid;
-  const settleButton=isManager
-   ?`<button type="button" class="btn ${settlement?"secondary":"primary"}" data-settlement="${esc(total.code)}" data-owner-name="${esc(total.name)}" data-units="${total.sold}" data-revenue="${total.revenue}" ${settlement||total.revenue<=0?"disabled":""}>${settlement?"Sudah dibayar":"Tandai dibayar"}</button>`
-   :settlement?'<span class="badge good">Sudah dibayar</span>':'<span class="badge warn">Belum dibayar</span>';
-  return `<tr><td><b>${esc(total.code)}</b><div class="small">${esc(total.name)}</div></td><td>${total.deposited}</td><td>${total.sold}</td><td>${Math.max(0,total.remaining)}</td><td class="money in">${rp(total.revenue)}</td><td>${settleButton}</td></tr>`;
+  const products=[...total.products.values()].map(product=>`<div class="small">${esc(product.name)} × ${product.quantity} · ${rp(product.revenue)}</div>`).join("")||"—";
+  return `<tr><td><b>${esc(total.code)}</b><div class="small">${esc(total.name)}</div></td><td>${total.deposited}</td><td>${total.sold}</td><td>${Math.max(0,total.remaining)}</td><td>${products}</td><td class="money in">${rp(total.revenue)}</td></tr>`;
  });
  $("recapRows").innerHTML=rows.join("");
  $("recapEmpty").style.display=rows.length?"none":"block";
@@ -218,7 +219,7 @@ function renderConsignmentRecap(){
    :` Riwayat mutasi tersedia sejak ${fmtDate(firstMovement)}.`
   :" Belum ada riwayat mutasi stok; jumlah titipan dan sisa belum dapat dihitung.";
  const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
- $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · sisa dihitung dari mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
+ $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · total yang harus dibayar dihitung dari seluruh produk owner yang terjual pada tanggal ini; pilih tanggal lain untuk melihat riwayat harian. Sisa dihitung dari mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
 }
 async function loadBookkeeping(){
  $("bookkeepingNotice").textContent="Memuat data Buku Kas sesuai hak akses...";
@@ -232,16 +233,13 @@ async function loadBookkeeping(){
  }
  const results=await Promise.allSettled([
   KasirAuth.listStockMovements(),
-  KasirAuth.listOwnerSettlements(),
   isManager?KasirAuth.listOwnerAccounts():Promise.resolve([]),
   isManager?KasirAuth.refreshInventoryProducts():KasirAuth.listOwnerStorageProducts()
  ]);
- const [movementsResult,settlementsResult,ownersResult,productsResult]=results;
+ const [movementsResult,ownersResult,productsResult]=results;
  const errors=[];
  if(movementsResult.status==="fulfilled")stockMovements=movementsResult.value;
  else errors.push(`Mutasi stok: ${movementsResult.reason.message}`);
- if(settlementsResult.status==="fulfilled")settlements=settlementsResult.value;
- else errors.push(`Status pembayaran: ${settlementsResult.reason.message}`);
  if(ownersResult.status==="fulfilled")ownerAccounts=ownersResult.value;
  else errors.push(`Daftar UMKM: ${ownersResult.reason.message}`);
  if(productsResult.status==="fulfilled")inventoryProducts=productsResult.value;
@@ -253,23 +251,6 @@ async function loadBookkeeping(){
 $("add").onclick=()=>{if(!isManager)return;let d=$("date").value,t=$("type").value,desc=$("desc").value.trim(),amount=+$("amount").value;if(!d||!desc||!amount)return toast("Lengkapi data");const entry={id:"MAN-"+Date.now(),date:d,type:t,desc,amount};cash.push(entry);save(STORE.cash,cash);bookkeeping.cash.push({user_id:KasirAuth.current()?.id,entry});$("desc").value="";$("amount").value="";render();toast("Catatan kas tersimpan")};
 $("search").oninput=render;$("month").onchange=render;
 $("recapDate").onchange=renderConsignmentRecap;$("recapOwnerFilter").onchange=renderConsignmentRecap;
-$("recapRows").addEventListener("click",async event=>{
- const button=event.target.closest("[data-settlement]");
- if(!button||button.disabled)return;
- const ownerCode=button.dataset.settlement,date=$("recapDate").value;
- if(!confirm(`Tandai pendapatan ${button.dataset.ownerName} pada ${fmtDate(`${date}T12:00:00+08:00`)} sebesar ${rp(button.dataset.revenue)} sudah dibayarkan?`))return;
- button.disabled=true;
- try{
-  await KasirAuth.markOwnerSettlement({ownerCode,ownerName:button.dataset.ownerName,date,unitsSold:button.dataset.units,grossAmount:button.dataset.revenue});
-  settlements=await KasirAuth.listOwnerSettlements();
-  renderConsignmentRecap();
-  toast("Status pembayaran UMKM tersimpan.");
- }catch(error){
-  console.error("Status pembayaran UMKM gagal disimpan:",error);
-  button.disabled=false;
-  toast(`Pembayaran belum tercatat: ${error.message}`);
- }
-});
 $("export").onclick=()=>{if(!isManager)return;let csv="Tanggal,ID,Keterangan,Jenis,Nominal\n";bookkeeping.cash.map(row=>row.entry).filter(Boolean).forEach(e=>csv+=`"${e.date}","${e.id}","${String(e.desc).replace(/"/g,'""')}","${e.type}","${e.amount}"\n`);let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="buku-kas.csv";a.click()};
 window.addEventListener("storage",()=>{cash=load(STORE.cash,[]);void loadBookkeeping()});
 window.addEventListener("focus",()=>void loadBookkeeping());
