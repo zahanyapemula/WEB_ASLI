@@ -403,6 +403,64 @@ $$;
 revoke all on function public.get_bookkeeping_data() from public, anon;
 grant execute on function public.get_bookkeeping_data() to authenticated;
 
+-- Existing UMKM accounts can safely relink to the code already stored on their products.
+create or replace function public.claim_owner_code(p_owner_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  caller_role text;
+  requested_code text := nullif(trim(p_owner_code), '');
+begin
+  if caller_id is null then
+    raise exception 'Silakan login sebelum menghubungkan kode UMKM.';
+  end if;
+
+  select p.role into caller_role
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  if caller_role is distinct from 'umkm' then
+    raise exception 'Pengaitan kode hanya tersedia untuk akun UMKM.';
+  end if;
+
+  if requested_code is null or requested_code !~ '^[0-9]{4}$' then
+    raise exception 'Kode UMKM harus terdiri dari 4 angka.';
+  end if;
+
+  if exists (
+    select 1 from public.user_profiles p
+    where p.owner_code = requested_code and p.user_id <> caller_id
+  ) then
+    raise exception 'Kode UMKM sudah terhubung ke akun lain.';
+  end if;
+
+  if not exists (
+    select 1
+    from public.user_data d
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+    ) as product(value)
+    where d.key = 'products'
+      and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = requested_code
+  ) then
+    raise exception 'Kode UMKM tidak ditemukan pada produk yang tersimpan.';
+  end if;
+
+  update public.user_profiles
+  set owner_code = requested_code
+  where user_id = caller_id and role = 'umkm';
+
+  return jsonb_build_object('owner_code', requested_code);
+end;
+$$;
+
+revoke all on function public.claim_owner_code(text) from public, anon;
+grant execute on function public.claim_owner_code(text) to authenticated;
+
 -- UMKM accounts can read only products assigned to their profile owner code.
 create or replace function public.get_owner_storage_products()
 returns jsonb

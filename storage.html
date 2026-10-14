@@ -81,6 +81,11 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <nav class="site-nav" id="siteNav"><a href="index.html">Beranda</a><a href="fitur.html" class="active">Fitur</a><a href="panduan.html">Panduan</a><a href="tentang.html">Tentang Kami</a><a href="kontak.html">Kontak</a><a href="login.html" class="site-account login-button"><span class="account-avatar" data-account-avatar>U</span><span class="account-label">Masuk</span></a></nav>
 </div></header>
 <div class="hero"><h2><span>Storage</span> Produk</h2><p>Catat barang titipan yang tersedia di toko. Atur stok, pemilik barang, batas minimum stok, dan ingredient setiap produk.</p><div class="note">🔔 Produk yang dibuat di halaman <b>Produk</b> otomatis muncul di sini. Atur stok awal dan penitipnya. Jika stok ≤ batas minimum, muncul peringatan restok. Saat transaksi di Kasir selesai, stok otomatis berkurang.</div></div>
+<section id="ownerCodeRecovery" class="card" style="display:none;margin-top:16px">
+<div class="title"><h3>Pengaitan Kode UMKM</h3><span class="tag">Akun UMKM</span></div>
+<p class="muted" style="font-size:12px;line-height:1.6">Kode profil Anda saat ini: <strong id="currentOwnerCode">memuat...</strong>. Jika produk lama belum tampil, masukkan kode yang diberikan Owner/Kasir atau yang Anda gunakan saat mendaftar. Kode hanya bisa dihubungkan jika cocok dengan produk yang sudah disimpan dan belum dipakai akun lain.</p>
+<div class="form"><div><label class="label" for="claimOwnerCode">Kode UMKM dari Owner/Kasir</label><input id="claimOwnerCode" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="Contoh: 0123"></div><div style="align-self:end"><button id="claimOwnerCodeButton" class="btn primary" type="button" style="width:100%">Hubungkan / Perbaiki Kode</button></div></div>
+</section>
 <div id="alerts" style="margin-top:16px"></div>
 <div class="card"><div class="title"><h3>Kelola Stok &amp; Ingredient</h3><span class="tag">Rekap titipan tersedia di Buku Kas</span></div>
 <div class="form"><div><label class="label">Pilih Produk</label><select id="product"></select></div><div><label class="label">Pemilik / Penitip Barang</label><select id="owner"><option value="">Belum diatur</option></select><div class="small" style="margin-top:5px">Tambahkan owner baru dari halaman Produk; owner tersimpan di sini untuk dipilih ulang.</div></div><div><label class="label">Kode UMKM</label><input id="ownerCode" readonly placeholder="Terisi saat owner dipilih"></div><div><label class="label">Stok Saat Ini</label><input id="stock" type="number" min="0" placeholder="0"></div><div><label class="label">Batas Minimum Stok</label><input id="reorder" type="number" min="0" placeholder="3"></div><div class="full"><label class="label">Ingredient / Bahan Produk</label><textarea id="ingredients" placeholder="Contoh: Kopi 20 g, Susu 150 ml, Gula 10 g"></textarea></div><div class="full"><button id="saveStorage" class="btn primary" style="width:100%">💾 Simpan Data Storage</button></div></div></div>
@@ -100,6 +105,10 @@ let storageFormDirty=false;
 let ownerAccounts=[];
 let stockMovements=[];
 if(isUmkm){
+ $('ownerCodeRecovery').style.display='';
+ $('currentOwnerCode').textContent=KasirAuth.profile?.owner_code||'belum ditetapkan';
+ const signupCode=String(KasirAuth.current()?.user_metadata?.owner_code||'');
+ if(/^\d{4}$/.test(signupCode))$('claimOwnerCode').value=signupCode;
  try{products=await KasirAuth.listOwnerStorageProducts()}
  catch(error){console.error('Produk titipan gagal dimuat:',error);toast(`Produk titipan tidak dapat dimuat: ${error.message}`);products=[]}
 }else{
@@ -108,8 +117,8 @@ if(isUmkm){
 }
 const params=new URLSearchParams(location.search);let selectedId=params.get('product')||'';
 const cleanOwner=name=>String(name||'').trim().replace(/\s+/g,' ');
-function ownerMetadata(name){const clean=cleanOwner(name),key=clean.toLowerCase();if(!clean)return null;if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_name)return{name:KasirAuth.profile.owner_name,code:KasirAuth.profile.owner_code||'',userId:KasirAuth.current()?.id};const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===key);if(account)return{name:account.owner_name,code:account.owner_code,userId:account.user_id};let owner=owners.find(x=>cleanOwner(x.name).toLowerCase()===key)||products.find(x=>cleanOwner(x.owner).toLowerCase()===key);let code=owner?.code||owner?.ownerCode||'';if(!/^\d{4}$/.test(String(code))){do{code=String(Math.floor(Math.random()*10000)).padStart(4,'0')}while(owners.some(x=>String(x.code)===code)||products.some(x=>String(x.ownerCode)===code))}return{name:clean,code,userId:KasirAuth.current()?.id}}
-function normalize(p){let changed=false;p.stock=Math.max(0,Number(p.stock)||0);p.reorder=Math.max(0,Number(p.reorder)||0);p.owner=cleanOwner(p.owner);p.ingredients=Array.isArray(p.ingredients)?p.ingredients:[];if(p.owner&&!/^\d{4}$/.test(String(p.ownerCode||''))){const owner=ownerMetadata(p.owner);p.ownerCode=owner?.code||'';changed=true}if(changed)p._storageChanged=true;return p}
+function ownerMetadata(name){const clean=cleanOwner(name),key=clean.toLowerCase();if(!clean)return null;if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_name)return{name:KasirAuth.profile.owner_name,code:KasirAuth.profile.owner_code||'',userId:KasirAuth.current()?.id};const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===key);if(account)return{name:account.owner_name,code:account.owner_code,userId:account.user_id};const owner=owners.find(x=>cleanOwner(x.name).toLowerCase()===key)||products.find(x=>cleanOwner(x.owner).toLowerCase()===key);return{name:clean,code:owner?.code||owner?.ownerCode||'',userId:KasirAuth.current()?.id}}
+function normalize(p){let changed=false;p.stock=Math.max(0,Number(p.stock)||0);p.reorder=Math.max(0,Number(p.reorder)||0);p.owner=cleanOwner(p.owner);p.ingredients=Array.isArray(p.ingredients)?p.ingredients:[];if(p.owner&&!/^\d{4}$/.test(String(p.ownerCode||''))){const owner=ownerMetadata(p.owner);if(/^\d{4}$/.test(String(owner?.code||''))){p.ownerCode=owner.code;changed=true}}if(changed)p._storageChanged=true;return p}
 if(!isUmkm){
  products=products.map(normalize);
  const normalizedProducts=products.filter(p=>p._storageChanged);if(normalizedProducts.length){normalizedProducts.forEach(p=>delete p._storageChanged);save(STORE.products,products)}
@@ -130,6 +139,21 @@ function populate(){const s=$('product');s.innerHTML=products.map(p=>`<option va
 function populateOwners(){const select=$('owner'),selected=select.value,names=new Map();ownerAccounts.forEach(account=>{const name=cleanOwner(account.owner_name);if(name)names.set(name.toLowerCase(),{name,code:account.owner_code||''})});owners.forEach(owner=>{const name=cleanOwner(owner.name);if(name&&!names.has(name.toLowerCase()))names.set(name.toLowerCase(),{name,code:owner.code||''})});products.forEach(product=>{const name=cleanOwner(product.owner);if(name&&!names.has(name.toLowerCase()))names.set(name.toLowerCase(),{name,code:product.ownerCode||''})});if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_name){const name=cleanOwner(KasirAuth.profile.owner_name);names.set(name.toLowerCase(),{name,code:KasirAuth.profile.owner_code||''})}select.innerHTML='<option value="">Belum diatur</option>'+[...names.values()].sort((a,b)=>String(a.code||'').localeCompare(String(b.code||''))).map(owner=>`<option value="${esc(owner.name)}">${esc(owner.code||'----')} · ${esc(owner.name)}</option>`).join('');if([...select.options].some(option=>option.value===selected))select.value=selected;if(KasirAuth.isUmkm){select.value=KasirAuth.profile?.owner_name||'';select.disabled=true}}
 function populateOwnerFilter(){const select=$('ownerFilter'),selected=select.value;const groups=new Map();products.forEach(p=>{const code=p.ownerCode||'~~~~';const label=p.owner?`${p.ownerCode||'----'} · ${p.owner}`:'Belum diatur';groups.set(code,label)});select.innerHTML='<option value="">Semua Owner</option>'+[...groups].sort((a,b)=>a[0].localeCompare(b[0])).map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join('');if([...select.options].some(o=>o.value===selected))select.value=selected}
 $('product').addEventListener('change',e=>{selectedId=e.target.value;storageFormDirty=false;loadForm()});
+$('claimOwnerCodeButton').addEventListener('click',async()=>{
+ const code=$('claimOwnerCode').value.trim();
+ $('claimOwnerCodeButton').disabled=true;
+ try{
+  await KasirAuth.claimOwnerCode(code);
+  products=await KasirAuth.listOwnerStorageProducts();
+  $('currentOwnerCode').textContent=KasirAuth.profile?.owner_code||code;
+  selectedId=products[0]?.id||'';
+  populateOwners();populate();populateOwnerFilter();render();
+  toast(`Kode UMKM ${code} berhasil dihubungkan. ${products.length} produk ditemukan.`);
+ }catch(error){
+  console.error('Pengaitan kode UMKM gagal:',error);
+  toast(`Kode belum dapat dihubungkan: ${error.message}`);
+ }finally{$('claimOwnerCodeButton').disabled=false}
+});
 $('owner').addEventListener('change',()=>{$('ownerCode').value=ownerMetadata($('owner').value)?.code||''});
 ['owner','stock','reorder','ingredients'].forEach(id=>$(id).addEventListener('input',()=>{storageFormDirty=true}));
 $('ownerFilter').addEventListener('change',render);

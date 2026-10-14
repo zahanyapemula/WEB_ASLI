@@ -15,6 +15,7 @@ MENGAKTIFKAN LOGIN DAN ROLE
 - Pendaftaran akun menghasilkan role UMKM sesuai skema yang sekarang. Owner memakai akun yang sudah memiliki role `cashier`; role tidak dipilih dari form pendaftaran.
 - Owner/Kasir membuat kode UMKM dari halaman Produk. UMKM wajib memasukkan kode tersebut saat daftar; fungsi database memeriksa produk dengan kode itu dan menolak kode yang tidak ditemukan atau sudah terhubung ke akun lain.
 - Setelah akun dibuat, role tetap UMKM dan Storage mengambil semua produk titipan berdasarkan kode UMKM, termasuk produk yang sudah terdaftar sebelum akun dibuat.
+- Jika akun UMKM lama menampilkan kode berbeda atau produk lama belum muncul, jalankan ulang supabase_schema.sql lalu gunakan panel Pengaitan Kode UMKM di Storage dengan kode asli dari Owner/Kasir. Kode produk tidak diganti otomatis berdasarkan nama.
 - Owner dengan role `cashier` mengelola produk dan kasir. Akun UMKM memantau produk sesuai pembatasan akses di database yang ada.
 - Jalankan website melalui HTTPS/localhost. Tanpa menjalankan migrasi SQL terbaru, halaman terlindungi menolak akses dan login akan menampilkan error profil.
 

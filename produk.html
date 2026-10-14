@@ -123,7 +123,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div>
 <div class="feature-summary"><strong>Alur singkat:</strong> Buat produk → atur owner dan stok di Storage → jual melalui Kasir → tinjau transaksi di Buku Kas dan laporan.</div>
 </div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, atau barcode produk" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan owner"><option value="">Semua owner</option></select></div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, atau barcode produk" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan owner"><option value="">Semua owner</option></select></div><div class="small" style="margin-top:6px">Filter owner mencakup UMKM yang belum memiliki akun selama produknya sudah didaftarkan.</div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
 
 </div><div id="toast" class="toast"></div>
 <script>
@@ -157,19 +157,6 @@ try { ownerAccounts=await KasirAuth.listOwnerAccounts(); }
 catch(error) {
  ownerAccountsError=error;
  console.error("Daftar akun owner gagal dimuat:",error);
-}
-if(!KasirAuth.isUmkm&&!ownerAccountsError){
- let ownershipRepaired=false;
- products=products.map(product=>{
-  const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===cleanOwner(product.owner).toLowerCase());
-  if(!account)return product;
-  if(product.owner!==account.owner_name||product.ownerCode!==account.owner_code||product._tenantUserId!==account.user_id){
-    ownershipRepaired=true;
-    return {...product,owner:account.owner_name,ownerCode:account.owner_code,_tenantUserId:account.user_id};
-  }
-  return product;
- });
- if(ownershipRepaired)save(STORE.products,products);
 }
 if(KasirAuth.isUmkm){
  $("productOwner").value=KasirAuth.profile?.owner_name||"";
@@ -252,7 +239,7 @@ function renderOwnerSuggestions(){
   const query=cleanOwner($("productOwner").value).toLowerCase();
   const matches=[...names.values()].filter(name=>!query||name.toLowerCase().includes(query)).sort((a,b)=>a.localeCompare(b,"id"));
   const options=$("ownerSuggestions");
-  options.innerHTML=matches.length?matches.map(name=>`<button type="button" role="option" data-owner="${esc(name)}">${esc(name)}</button>`).join('<div class="small" style="padding:6px 10px">Owner tersimpan di daftar produk lokal</div>'):'<div class="small" style="padding:9px 10px">Belum ada nama cocok. Ketik nama pemilik baru, lalu simpan produk.</div>';
+  options.innerHTML=matches.length?matches.map(name=>`<button type="button" role="option" data-owner="${esc(name)}">${esc(name)}</button>`).join('<div class="small" style="padding:6px 10px">Termasuk UMKM yang belum memiliki akun, jika produknya sudah terdaftar</div>'):'<div class="small" style="padding:9px 10px">Belum ada nama cocok. Ketik nama pemilik baru, lalu simpan produk.</div>';
   options.querySelectorAll("[data-owner]").forEach(option=>option.addEventListener("click",()=>{
     $("productOwner").value=option.dataset.owner;
     syncOwnerCodeFromName();
@@ -374,7 +361,7 @@ function renderEAN13(svg, value){
   svg.innerHTML=`<rect x="0" y="0" width="${total}" height="78" fill="#fff"/><g fill="#111">${rects.join("")}</g><text x="${total/2}" y="75" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="#111">${value}</text>`;
 }
 
-function addProduct(){
+async function addProduct(){
  if(!KasirAuth.current()){
   toast("Sesi akun belum aktif. Silakan masuk kembali sebelum menambah produk.");
   return;
@@ -409,8 +396,19 @@ function addProduct(){
    ingredients:[],
    createdAt:new Date().toISOString()
  };
- products.push(product);
- save(STORE.products,products);
+ const addButton=$("add");
+ addButton.disabled=true;
+ const nextProducts=[...products,product];
+ try{
+  await KasirAuth.saveProductsAndWait(nextProducts);
+  products=nextProducts;
+ }catch(error){
+  console.error("Produk gagal disimpan ke Supabase:",error);
+  toast(`Produk belum tersimpan ke server: ${error.message}`);
+  return;
+ }finally{
+  addButton.disabled=false;
+ }
  $("name").value="";
  $("price").value="";
  $("cost").value="";

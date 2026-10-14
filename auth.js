@@ -75,9 +75,11 @@
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id,key' })
       ));
-      results.forEach(({ error }) => {
-        if (error) reportCloudError(error);
-      });
+      const failedSave = results.find(({ error }) => error)?.error;
+      if (failedSave) {
+        reportCloudError(failedSave);
+        throw failedSave;
+      }
       return;
     }
     const { error } = await client.from('user_data').upsert({
@@ -161,6 +163,16 @@
     if (!loadedProductTenantIds.has(currentUser.id)) loadedProductTenantIds.add(currentUser.id);
     originalSetItem(localKey('products'), JSON.stringify(products));
     return products;
+  }
+
+  async function saveProductsAndWait(products) {
+    await ready;
+    if (!client || !session?.access_token || !currentUser || !['admin', 'cashier'].includes(currentProfile?.role)) {
+      throw new Error('Hanya Owner/Kasir yang dapat menyimpan produk.');
+    }
+    if (!Array.isArray(products)) throw new Error('Daftar produk tidak valid.');
+    await saveCloud('products', products);
+    originalSetItem(localKey('products'), JSON.stringify(products));
   }
 
   async function loadProfile(userId = currentUser?.id) {
@@ -278,6 +290,20 @@
       throw new Error('Respons produk titipan dari Supabase tidak valid.');
     }
     return data.products;
+  }
+
+  async function claimOwnerCode(ownerCode) {
+    await ready;
+    if (!client || !currentUser || currentProfile?.role !== 'umkm') {
+      throw new Error('Pengaitan kode hanya tersedia untuk akun UMKM yang sedang login.');
+    }
+    const code = String(ownerCode || '').trim();
+    if (!/^\d{4}$/.test(code)) throw new Error('Kode UMKM harus terdiri dari 4 angka.');
+    const { data, error } = await client.rpc('claim_owner_code', { p_owner_code: code });
+    if (error) throw error;
+    if (data?.owner_code !== code) throw new Error('Supabase tidak mengonfirmasi perubahan kode UMKM.');
+    await loadProfile(currentUser.id);
+    return currentProfile;
   }
 
   async function updateOwnerProductIngredients(productId, ingredients) {
@@ -602,7 +628,7 @@
     DATA_NAMES, accounts, current, read, write, key, setSession,
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
-    listBookkeepingData, listOwnerStorageProducts, updateOwnerProductIngredients, refreshInventoryProducts, ready,
+    listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductIngredients, refreshInventoryProducts, saveProductsAndWait, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },
