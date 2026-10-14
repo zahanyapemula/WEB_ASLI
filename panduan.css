@@ -1128,12 +1128,10 @@ button {
         padding-right: 13px;
     }
 
-
     .logo {
 
         font-size: 13px;
     }
-
 
     .content {
 
@@ -1204,4 +1202,81 @@ button {
         padding: 5px 6px;
     }
 
+}
+
+@media (max-width: 600px) {
+    .guide-header p {
+        font-size: 13px;
+        padding: 0 8px;
+    }
+
+    .guide-info {
+        min-width: 0;
+    }
+
+    .guide-label {
+        font-size: 11px;
+    }
+
+    .guide-info h2 {
+        font-size: 17px;
+    }
+
+    .guide-info > p {
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
+    .guide-user {
+        font-size: 11px;
+    }
+
+    .read-button {
+        min-height: 42px;
+        padding: 9px 12px;
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 390px) {
+    .guide-card {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        min-height: 0;
+        padding: 12px;
+    }
+
+    .guide-image {
+        height: clamp(150px, 55vw, 210px);
+    }
+
+    .guide-info {
+        padding: 0 2px 4px;
+    }
+
+    .guide-label {
+        font-size: 12px;
+    }
+
+    .guide-info h2 {
+        font-size: 19px;
+    }
+
+    .guide-info > p {
+        font-size: 13px;
+    }
+
+    .guide-user {
+        font-size: 12px;
+    }
+
+    .read-button {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 320px) {
+    .guide-header p {
+        font-size: 12px;
+    }
 }

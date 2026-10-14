@@ -992,3 +992,60 @@ VERY SMALL PHONE
     grid-column: 2;
 }
 
+@media (max-width: 600px) {
+    .feature-title p {
+        font-size: 13px;
+        padding: 0 8px;
+    }
+
+    .tool-card {
+        min-height: 170px;
+        padding: 14px 11px;
+    }
+
+    .tool-card h2 {
+        font-size: 13px;
+        line-height: 1.35;
+    }
+
+    .tool-card p {
+        font-size: 11px;
+        line-height: 1.5;
+    }
+}
+
+@media (max-width: 390px) {
+    .tools-grid {
+        grid-template-columns: 1fr;
+        gap: 11px;
+    }
+
+    .tool-card,
+    .tool-card:last-child {
+        grid-column: 1;
+        width: 100%;
+        max-width: 360px;
+        min-height: 0;
+        margin: 0 auto;
+        padding: 15px;
+    }
+
+    .tool-card h2 {
+        font-size: 15px;
+    }
+
+    .tool-card p {
+        font-size: 12px;
+    }
+
+    .feature-title p {
+        font-size: 14px;
+        padding: 0 4px;
+    }
+}
+
+@media (max-width: 320px) {
+    .tool-card h2 {
+        font-size: 14px;
+    }
+}
