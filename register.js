@@ -25,7 +25,7 @@
     let valid = true; const email = fields.email.value.trim().toLowerCase();
     if (!fields.name.value.trim()) { errors.name.textContent = 'Nama lengkap wajib diisi.'; valid = false; }
     const ownerCode = fields.ownerCode.value.trim();
-    if (!/^\d{4}$/.test(ownerCode)) { errors.ownerCode.textContent = 'Masukkan kode UMKM 4 digit dari Owner/Kasir.'; valid = false; }
+    if (ownerCode && !/^\d{4}$/.test(ownerCode)) { errors.ownerCode.textContent = 'Jika diisi, kode UMKM harus terdiri dari 4 angka.'; valid = false; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.email.textContent = 'Masukkan email yang valid.'; valid = false; }
     if (fields.password.value.length < 6) { errors.password.textContent = 'Password minimal 6 karakter.'; valid = false; }
     if (fields.confirm.value !== fields.password.value) { errors.confirm.textContent = 'Konfirmasi password tidak sama.'; valid = false; }
@@ -45,7 +45,7 @@
       setTimeout(() => { location.href = 'fitur.html'; }, 500);
     } catch (err) {
       const raw = String(err?.message || err || '');
-      const message = /database error saving new user/i.test(raw)
+      const message = ownerCode && /database error saving new user/i.test(raw)
         ? 'Kode UMKM tidak ditemukan atau sudah terhubung ke akun lain. Pastikan Owner/Kasir sudah menyimpan produk dengan kode tersebut.'
         : friendlyError(err);
       if (message.toLowerCase().includes('email ini sudah terdaftar')) errors.email.textContent = message;
