@@ -60,6 +60,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .empty{text-align:center;color:#94a199;padding:35px 10px;font-size:12px}
 .toast{position:fixed;z-index:50;bottom:20px;left:50%;transform:translate(-50%,20px);opacity:0;background:#173120;color:#fff;padding:10px 18px;border-radius:99px;font-size:11px;font-weight:800;transition:.2s}.toast.show{opacity:1;transform:translate(-50%,0)}
 .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:13px}
+.product-filters{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(190px,.7fr);gap:10px;margin-bottom:14px}
 .product{border:1px solid var(--line);border-radius:17px;padding:14px;background:#fff}.product:hover{border-color:#b8ddb9}
 .product h4{margin:0;font-size:14px}.price{color:#328f46;font:800 12px var(--mono);margin-top:4px}
 .owner-picker{position:relative}
@@ -84,7 +85,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .scanner-box{display:grid;grid-template-columns:1fr 100px;gap:9px}.ingredient-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#fff}.ingredient-card h4{margin:0 0 8px}.ingredient-list{display:grid;gap:7px}.ingredient{display:flex;justify-content:space-between;padding:9px 10px;background:var(--soft2);border-radius:10px;font-size:11px}
 .camera-modal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:18px;background:#102015bd}.camera-modal[hidden]{display:none}.camera-panel{width:min(520px,100%);padding:18px;background:#fff;border-radius:16px}.camera-panel video{display:block;width:100%;max-height:60vh;margin-top:12px;background:#111;border-radius:10px;object-fit:cover}.camera-status{min-height:1.5em;margin-top:10px;color:var(--muted);font-size:12px}.camera-switch{width:100%;min-height:44px;margin-top:10px}.camera-switch:disabled{cursor:not-allowed;opacity:.55}
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
-@media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
+@media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare,.product-filters{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
 </style>    <script src="auth.js"></script>
 <link rel="stylesheet" href="shared-navbar.css">
 <link rel="stylesheet" href="responsive.css">
@@ -120,7 +121,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div>
 <div class="feature-summary"><strong>Alur singkat:</strong> Buat produk → atur owner dan stok di Storage → jual melalui Kasir → tinjau transaksi di Buku Kas dan laporan.</div>
 </div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, atau barcode produk" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan owner"><option value="">Semua owner</option></select></div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
 
 </div><div id="toast" class="toast"></div>
 <script>
@@ -245,6 +246,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
     owners=load(STORE.owners,[]);
     products=load(STORE.products,[]);
     renderOwnerSuggestions();
+    render();
     if(KasirAuth.isUmkm){
       $("productOwner").value=KasirAuth.profile?.owner_name||"";
       $("productOwner").readOnly=true;
@@ -391,9 +393,24 @@ $("price").addEventListener("keydown",e=>{if(e.key==="Enter"){$("cost").focus()}
 $("cost").addEventListener("keydown",e=>{if(e.key==="Enter")addProduct()});
 
 function render(){
- $("count").textContent=products.length+" produk";$("empty").style.display=products.length?"none":"block";
+ const selectedOwner=$("ownerFilter").value;
+ const ownerNames=[...new Set(products.map(product=>String(product.owner||"").trim()||"Belum diatur"))].sort((a,b)=>a.localeCompare(b,"id"));
+ const ownerFilter=$("ownerFilter");
+ ownerFilter.replaceChildren(new Option("Semua owner",""));
+ ownerNames.forEach(owner=>ownerFilter.add(new Option(owner,owner)));
+ ownerFilter.value=ownerNames.includes(selectedOwner)?selectedOwner:"";
+ const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
+ const filteredProducts=products.filter(product=>{
+  const searchable=[product.name,product.code,product.productCode,product.barcode]
+   .some(value=>String(value||"").toLocaleLowerCase("id-ID").includes(query));
+  const owner=String(product.owner||"").trim()||"Belum diatur";
+  return searchable&&(!ownerFilter.value||owner===ownerFilter.value);
+ });
+ $("count").textContent=filteredProducts.length+" dari "+products.length+" produk";
+ $("empty").textContent=products.length?"Produk tidak ditemukan.":"Belum ada produk.";
+ $("empty").style.display=filteredProducts.length?"none":"block";
  $("list").innerHTML="";
- products.forEach(p=>{
+ filteredProducts.forEach(p=>{
   let d=document.createElement("div");d.className="product";
   d.innerHTML=`<h4>${esc(p.name)}</h4><div class="price">${rp(p.price)} · HPP ${rp(p.cost)}</div>
   <div class="small" style="margin-top:7px">Kode Produk: <strong>${esc(p.code || p.productCode || p.barcode)}</strong></div>
@@ -408,6 +425,8 @@ function render(){
   d.querySelector(".del").onclick=()=>{if(confirm("Hapus "+p.name+"?")){products=products.filter(x=>x.id!==p.id);save(STORE.products,products);render()}};
  });
 }
+$("productSearch").addEventListener("input",render);
+$("ownerFilter").addEventListener("change",render);
 render();
 }).catch(error=>{
  console.error("Halaman produk gagal diinisialisasi:",error);

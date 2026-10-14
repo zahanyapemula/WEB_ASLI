@@ -304,13 +304,24 @@
     function quick() {
       const box = $('quick');
       if (!box) return;
-      box.innerHTML = products.map(product => `
+      const query = $('quickSearch').value.trim().toLocaleLowerCase('id-ID');
+      const visibleProducts = products.filter(product =>
+        [product.name, product.code, product.productCode, product.barcode]
+          .some(value => String(value || '').toLocaleLowerCase('id-ID').includes(query))
+      );
+      box.innerHTML = visibleProducts.map(product => `
         <button type="button" class="product" style="text-align:left;cursor:pointer" data-code="${esc(product.barcode)}">
           <h4>${esc(product.name)}</h4>
           <div class="price">${rp(product.price)}</div>
           <div class="small">Kode Produk: ${esc(product.code || product.productCode || '—')}</div>
           <div class="small">Stok ${Number(product.stock || 0)} · Barcode: ${esc(product.barcode)}</div>
         </button>`).join('');
+      if (!visibleProducts.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = products.length ? 'Produk tidak ditemukan.' : 'Belum ada produk.';
+        box.appendChild(empty);
+      }
       box.querySelectorAll('[data-code]').forEach(button => {
         button.onclick = () => add(button.dataset.code);
       });
@@ -353,6 +364,7 @@
     });
     cameraScanner.setReady();
 
+    $('quickSearch').addEventListener('input', quick);
     $('cash').addEventListener('input', change);
     $('clear').addEventListener('click', () => {
       cart = [];
