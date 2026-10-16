@@ -15,8 +15,13 @@ create table if not exists public.user_profiles (
   role text not null default 'umkm' check (role in ('admin', 'cashier', 'umkm')),
   owner_name text not null default '',
   owner_code text unique check (owner_code is null or owner_code ~ '^[0-9]{4}$'),
+  store_name text not null default '',
+  store_code text,
   created_at timestamptz not null default now()
 );
+
+alter table public.user_profiles add column if not exists store_name text not null default '';
+alter table public.user_profiles add column if not exists store_code text;
 
 create or replace function public.is_inventory_admin()
 returns boolean
@@ -56,7 +61,33 @@ set search_path = ''
 as $$
 declare
   new_code text;
+  req_role text;
+  s_name text;
+  s_code text;
 begin
+  req_role := coalesce(nullif(trim(new.raw_user_meta_data ->> 'role'), ''), 'umkm');
+  s_name := coalesce(nullif(trim(new.raw_user_meta_data ->> 'store_name'), ''), '');
+  s_code := coalesce(nullif(trim(new.raw_user_meta_data ->> 'store_code'), ''), '');
+
+  -- 1. OWNER TOKO (Admin) atau Kasir
+  if req_role in ('admin', 'cashier') then
+    insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code)
+    values (
+      new.id,
+      req_role,
+      coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)),
+      null,
+      s_name,
+      nullif(s_code, '')
+    )
+    on conflict (user_id) do update set
+      role = excluded.role,
+      store_name = coalesce(nullif(excluded.store_name, ''), public.user_profiles.store_name),
+      store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code);
+    return new;
+  end if;
+
+  -- 2. UMKM PENITIP
   new_code := nullif(trim(new.raw_user_meta_data ->> 'owner_code'), '');
   if new_code is not null then
     if new_code !~ '^[0-9]{4}$' then
@@ -97,14 +128,17 @@ begin
     end loop;
   end if;
 
-  insert into public.user_profiles (user_id, role, owner_name, owner_code)
+  insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code)
   values (
     new.id,
     'umkm',
     coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)),
-    new_code
+    new_code,
+    s_name,
+    nullif(s_code, '')
   )
-  on conflict (user_id) do nothing;
+  on conflict (user_id) do update set
+    store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code);
   return new;
 end;
 $$;

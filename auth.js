@@ -177,13 +177,34 @@
 
   async function loadProfile(userId = currentUser?.id) {
     if (!client || !userId) return null;
-    const { data, error } = await client
+    let { data, error } = await client
       .from('user_profiles')
-      .select('user_id, role, owner_name, owner_code')
+      .select('user_id, role, owner_name, owner_code, store_name, store_code')
       .eq('user_id', userId)
       .maybeSingle();
+
+    if (error && (String(error.message || '').includes('store_') || error.code === 'PGRST204')) {
+      const fallback = await client
+        .from('user_profiles')
+        .select('user_id, role, owner_name, owner_code')
+        .eq('user_id', userId)
+        .maybeSingle();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) throw error;
     if (!data) throw new Error('Profil akun belum tersedia. Jalankan migrasi supabase_schema.sql di Supabase.');
+
+    if (!data.store_code && currentUser?.user_metadata?.store_code) {
+      data.store_code = currentUser.user_metadata.store_code;
+    }
+    if (!data.store_name && currentUser?.user_metadata?.store_name) {
+      data.store_name = currentUser.user_metadata.store_name;
+    }
+    if (data.role === 'umkm' && currentUser?.user_metadata?.role === 'admin') {
+      data.role = 'admin';
+    }
+
     currentProfile = data;
     return data;
   }
@@ -364,12 +385,24 @@
     return currentUser;
   }
 
-  async function signUp(email, password, name, ownerCode) {
+  async function signUp(email, password, name, extra = {}) {
     const cleanEmail = email.trim().toLowerCase();
+    let meta = {};
+    if (typeof extra === 'string') {
+      meta = { name: name.trim(), owner_code: extra.trim(), role: 'umkm' };
+    } else {
+      meta = {
+        name: name.trim(),
+        role: extra.role || 'umkm',
+        store_name: String(extra.storeName || '').trim(),
+        store_code: String(extra.storeCode || '').trim(),
+        owner_code: String(extra.ownerCode || '').trim()
+      };
+    }
     const { data, error } = await client.auth.signUp({
       email: cleanEmail,
       password,
-      options: { data: { name: name.trim(), owner_code: String(ownerCode || '').trim() } }
+      options: { data: meta }
     });
     if (error) throw error;
     session = data.session;
@@ -501,6 +534,27 @@
     const emailEl = menu.querySelector('[data-profile-email]');
     if (nameEl) nameEl.textContent = name;
     if (emailEl) emailEl.textContent = email;
+
+    let badgeEl = menu.querySelector('[data-profile-badge]');
+    if (!badgeEl && emailEl?.parentNode) {
+      badgeEl = document.createElement('div');
+      badgeEl.setAttribute('data-profile-badge', 'true');
+      badgeEl.style.cssText = 'margin-top:4px;font-size:11px;font-weight:700;color:#2d6934;background:#edf7ea;padding:3px 8px;border-radius:6px;display:inline-block;';
+      emailEl.parentNode.insertBefore(badgeEl, emailEl.nextSibling);
+    }
+    if (badgeEl) {
+      const storeCode = currentProfile?.store_code || user?.user_metadata?.store_code || '';
+      const storeName = currentProfile?.store_name || user?.user_metadata?.store_name || '';
+      const role = currentProfile?.role || user?.user_metadata?.role || 'umkm';
+      if (role === 'admin') {
+        badgeEl.textContent = `Owner Toko${storeName ? ' · ' + storeName : ''}${storeCode ? ' (Kode: ' + storeCode + ')' : ''}`;
+      } else if (role === 'cashier') {
+        badgeEl.textContent = `Kasir${storeCode ? ' · Kode Toko: ' + storeCode : ''}`;
+      } else {
+        const umkmCode = currentProfile?.owner_code || user?.user_metadata?.owner_code || '';
+        badgeEl.textContent = `Mitra UMKM${storeCode ? ' · Toko: ' + storeCode : ''}${umkmCode ? ' (ID: ' + umkmCode + ')' : ''}`;
+      }
+    }
   }
 
   function ensureProfileMenu(user) {
