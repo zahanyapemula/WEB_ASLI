@@ -6,7 +6,7 @@
   const SESSION_KEY = 'kasirTokoSupabaseSession';
   const CURRENT_KEY = 'kasirTokoCurrentUser';
   const LOGIN_KEY = 'kasirTokoLoggedIn';
-  const publicPages = ['index.html','login.html','register.html','panduan.html','tentang.html','kontak.html','reset-password.html',''];
+  const publicPages = ['index.html','login.html','register.html','register-toko.html','panduan.html','tentang.html','kontak.html','reset-password.html',''];
   const protectedPages = ['dashboard.html','kasir.html','produk.html','storage.html','buku-kas.html','perbandingan.html','scan-ingredient.html'];
   const file = (location.pathname.split('/').pop() || '').toLowerCase();
   let hydrating = false;
@@ -727,7 +727,7 @@
       location.replace('storage.html');
       return;
     }
-    if (user && (file === 'login.html' || file === 'register.html')) {
+    if (user && (file === 'login.html' || file === 'register.html' || file === 'register-toko.html')) {
       location.replace(currentProfile?.role === 'umkm' ? 'storage.html' : 'fitur.html');
       return;
     }

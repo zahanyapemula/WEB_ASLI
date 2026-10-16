@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Web PKM — Daftar</title>
+<title>Web PKM — Daftar UMKM</title>
 <link rel="icon" type="image/png" href="ikon.png">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="register.css"><script src="auth.js"></script>
@@ -11,53 +11,29 @@
 <main class="register-page">
   <section class="register-card">
     <a class="brand" href="index.html"><img src="logo.png" alt="Web PKM"><span>Web PKM</span></a>
-
-    <div class="role-switch" role="tablist" aria-label="Pilih Jenis Akun">
-      <button type="button" class="role-tab active" id="tabOwner" data-role="admin">Owner Toko</button>
-      <button type="button" class="role-tab" id="tabUmkm" data-role="umkm">UMKM Penitip</button>
-    </div>
-
     <div class="heading">
-      <span class="eyebrow" id="eyebrowRole">AKUN OWNER TOKO</span>
-      <h1 id="headingTitle">Daftar Toko Baru</h1>
-      <p id="headingDesc">Daftarkan toko Anda. Kode toko unik otomatis dibuat dari singkatan nama toko + 4 digit angka.</p>
+      <span class="eyebrow">AKUN UMKM</span>
+      <h1>Daftar sekarang</h1>
+      <p>Daftar sebagai mitra UMKM penitip barang. Masukkan Kode Toko tempat Anda menitipkan produk.</p>
     </div>
-
     <form id="registerForm" novalidate>
-      <label id="labelFullName">Nama pemilik toko<input id="fullName" type="text" autocomplete="name" placeholder="Masukkan nama pemilik toko"></label>
+      <label>Nama lengkap / UMKM<input id="fullName" type="text" autocomplete="name" placeholder="Masukkan nama lengkap atau usaha"></label>
       <small id="nameError" class="error"></small>
-
-      <!-- Khusus Owner Toko -->
-      <div class="field-group" id="storeNameGroup">
-        <label>Nama toko<input id="storeName" type="text" autocomplete="organization" placeholder="Contoh: Toko Berkah Mandiri"></label>
-        <div class="code-preview" id="storeCodePreview" style="display:none;">
-          <span>Kode Toko Otomatis:</span>
-          <strong id="previewCodeBadge" class="code-badge">-</strong>
-        </div>
-        <small id="storeNameError" class="error"></small>
-      </div>
-
-      <!-- Khusus UMKM Penitip -->
-      <div class="field-group" id="storeCodeGroup" style="display:none;">
-        <label>Kode Toko tempat menitip<input id="storeCode" type="text" autocomplete="off" placeholder="Contoh: TBM-1234 (minta ke Owner Toko)"></label>
-        <small id="storeCodeError" class="error"></small>
-      </div>
-
-      <div class="field-group" id="ownerCodeGroup" style="display:none;">
-        <label>Kode UMKM dari Owner/Kasir (opsional)<input id="ownerCode" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" placeholder="Kosongkan jika belum ada kode (4 angka)"></label>
-        <small id="ownerCodeError" class="error"></small>
-      </div>
-
+      <label>Kode Toko tempat menitip<input id="storeCode" type="text" autocomplete="off" placeholder="Contoh: TBJ-1234 (dari Owner Toko)"></label>
+      <small id="storeCodeError" class="error"></small>
+      <label>Kode UMKM dari Owner/Kasir (opsional)<input id="ownerCode" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" placeholder="Kosongkan jika belum ada kode 4 angka"></label>
+      <small id="ownerCodeError" class="error"></small>
       <label>Email<input id="email" type="email" autocomplete="email" placeholder="Masukkan email aktif"></label>
       <small id="emailError" class="error"></small>
       <label>Password<input id="password" type="password" autocomplete="new-password" placeholder="Minimal 6 karakter"></label>
       <small id="passwordError" class="error"></small>
       <label>Konfirmasi password<input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Ulangi password"></label>
       <small id="confirmError" class="error"></small>
-      <button id="registerButton" type="submit">Daftarkan Toko</button>
+      <button id="registerButton" type="submit">Buat Akun UMKM</button>
       <p id="registerStatus" class="auth-status" aria-live="polite"></p>
     </form>
-    <p class="login-link">Sudah punya akun? <a href="login.html">Masuk sekarang</a></p>
+    <p class="login-link">Pemilik toko baru? <a href="register-toko.html">Daftar Toko di sini</a></p>
+    <p class="login-link" style="margin-top:8px;">Sudah punya akun? <a href="login.html">Masuk sekarang</a></p>
   </section>
 </main>
 <script src="register.js"></script>
