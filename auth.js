@@ -727,7 +727,7 @@
       location.replace('storage.html');
       return;
     }
-    if (user && (file === 'login.html' || file === 'register.html' || file === 'register-toko.html')) {
+    if (user && file === 'login.html') {
       location.replace(currentProfile?.role === 'umkm' ? 'storage.html' : 'fitur.html');
       return;
     }
