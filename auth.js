@@ -111,13 +111,39 @@
     }
   };
 
+  async function getStoreTenantUserIds() {
+    if (!currentUser) return [];
+    const ids = [currentUser.id];
+    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || '').trim();
+    if (storeCode && ['admin', 'cashier'].includes(currentProfile?.role)) {
+      try {
+        const { data } = await client
+          .from('user_profiles')
+          .select('user_id')
+          .eq('role', 'umkm')
+          .ilike('store_code', storeCode);
+        for (const row of data || []) {
+          if (row.user_id && !ids.includes(row.user_id)) ids.push(row.user_id);
+        }
+      } catch (e) {
+        console.warn('Gagal memuat tenant toko:', e);
+      }
+    }
+    return ids;
+  }
+
   async function hydrateCloud() {
     if (!client || !currentUser || !session?.access_token) return;
     if (currentProfile?.role === 'umkm') return;
     hydrating = true;
     try {
       let query = client.from('user_data').select('user_id,key,value');
-      if (!['admin', 'cashier'].includes(currentProfile?.role)) query = query.eq('user_id', currentUser.id);
+      if (['admin', 'cashier'].includes(currentProfile?.role)) {
+        const tenantIds = await getStoreTenantUserIds();
+        query = query.in('user_id', tenantIds);
+      } else {
+        query = query.eq('user_id', currentUser.id);
+      }
       const { data, error } = await query;
       if (error) throw error;
       const allProducts = [];
@@ -147,10 +173,12 @@
       throw new Error('Hanya Admin/Kasir yang dapat memuat ulang seluruh produk.');
     }
     await Promise.all([...pendingProductSaves]);
+    const tenantIds = await getStoreTenantUserIds();
     const { data, error } = await client
       .from('user_data')
       .select('user_id, value')
-      .eq('key', 'products');
+      .eq('key', 'products')
+      .in('user_id', tenantIds);
     if (error) throw error;
     const products = [];
     loadedProductTenantIds.clear();
@@ -179,11 +207,11 @@
     if (!client || !userId) return null;
     let { data, error } = await client
       .from('user_profiles')
-      .select('user_id, role, owner_name, owner_code, store_name, store_code')
+      .select('user_id, role, owner_name, owner_code, store_name, store_code, avatar_url')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (error && (String(error.message || '').includes('store_') || error.code === 'PGRST204')) {
+    if (error && (String(error.message || '').includes('avatar_url') || String(error.message || '').includes('store_') || error.code === 'PGRST204')) {
       const fallback = await client
         .from('user_profiles')
         .select('user_id, role, owner_name, owner_code')
@@ -204,6 +232,9 @@
     if (!data.store_name && currentUser?.user_metadata?.store_name) {
       data.store_name = currentUser.user_metadata.store_name;
     }
+    if (!data.avatar_url && currentUser?.user_metadata?.avatar_url) {
+      data.avatar_url = currentUser.user_metadata.avatar_url;
+    }
     if (data.role === 'umkm' && currentUser?.user_metadata?.role === 'admin') {
       data.role = 'admin';
     }
@@ -219,8 +250,20 @@
   async function listOwnerAccounts() {
     await ready;
     if (!currentProfile || !client) throw new Error('Profil akun belum siap.');
-    let query = client.from('user_profiles').select('user_id, role, owner_name, owner_code').eq('role', 'umkm');
-    if (currentProfile.role === 'umkm') query = query.eq('user_id', currentUser.id);
+    let query = client
+      .from('user_profiles')
+      .select('user_id, role, owner_name, owner_code, store_name, store_code, avatar_url')
+      .eq('role', 'umkm');
+    if (currentProfile.role === 'umkm') {
+      query = query.eq('user_id', currentUser.id);
+    } else if (['admin', 'cashier'].includes(currentProfile.role)) {
+      const storeCode = String(currentProfile.store_code || currentUser?.user_metadata?.store_code || '').trim();
+      if (storeCode) {
+        query = query.ilike('store_code', storeCode);
+      } else {
+        return [];
+      }
+    }
     const { data, error } = await query.order('owner_name');
     if (error) throw error;
     return data || [];
@@ -229,15 +272,22 @@
   async function listStockMovements() {
     await ready;
     if (!client || !currentUser) throw new Error('Silakan login untuk memuat riwayat stok.');
+    const tenantIds = await getStoreTenantUserIds();
     const pageSize = 1000;
     const movements = [];
     for (let offset = 0; ; offset += pageSize) {
-      const { data, error } = await client
+      let query = client
         .from('stock_movements')
         .select('id, product_id, product_code, product_name, owner_code, owner_name, movement_type, quantity, gross_amount, occurred_at, sale_id, note, actor_user_id')
         .order('occurred_at')
         .order('id')
         .range(offset, offset + pageSize - 1);
+
+      if (['admin', 'cashier'].includes(currentProfile?.role)) {
+        query = query.in('actor_user_id', tenantIds);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       movements.push(...(data || []));
       if (!data || data.length < pageSize) return movements;
@@ -277,15 +327,22 @@
   async function listOwnerSettlements() {
     await ready;
     if (!client || !currentUser) throw new Error('Silakan login untuk memuat status pembayaran.');
+    const tenantIds = await getStoreTenantUserIds();
     const pageSize = 1000;
     const settlements = [];
     for (let offset = 0; ; offset += pageSize) {
-      const { data, error } = await client
+      let query = client
         .from('owner_settlements')
         .select('owner_code, owner_name, settlement_date, units_sold, gross_amount, paid_at, paid_by')
         .order('settlement_date', { ascending: false })
         .order('owner_code')
         .range(offset, offset + pageSize - 1);
+
+      if (['admin', 'cashier'].includes(currentProfile?.role)) {
+        query = query.in('paid_by', tenantIds);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       settlements.push(...(data || []));
       if (!data || data.length < pageSize) return settlements;
@@ -509,24 +566,31 @@
     });
     if (uploadError) throw uploadError;
     const { data } = bucket.getPublicUrl(path);
-    const avatarUrl = `${data.publicUrl}${data.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    const newAvatarUrl = `${data.publicUrl}${data.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
     const { error: updateError } = await client.auth.updateUser({
-      data: { ...(currentUser.user_metadata || {}), avatar_url: avatarUrl }
+      data: { ...(currentUser.user_metadata || {}), avatar_url: newAvatarUrl }
     });
     if (updateError) throw updateError;
-    currentUser = { ...currentUser, user_metadata: { ...(currentUser.user_metadata || {}), avatar_url: avatarUrl } };
+
+    try {
+      await client.from('user_profiles').update({ avatar_url: newAvatarUrl }).eq('user_id', currentUser.id);
+    } catch (_) {}
+
+    currentUser = { ...currentUser, user_metadata: { ...(currentUser.user_metadata || {}), avatar_url: newAvatarUrl } };
+    if (currentProfile) currentProfile.avatar_url = newAvatarUrl;
     writeLocal(CURRENT_KEY, currentUser);
     renderAccountAvatars(currentUser);
     renderProfileMenu(currentUser);
-    return avatarUrl;
+    updateNavbarAccountDisplay(currentUser);
+    return newAvatarUrl;
   }
 
   function avatarUrl(user) {
-    return String(user?.user_metadata?.avatar_url || '').trim();
+    return String(user?.user_metadata?.avatar_url || currentProfile?.avatar_url || '').trim();
   }
 
   function renderAccountAvatars(user) {
-    const displayName = user?.user_metadata?.name || user?.email || 'Akun';
+    const displayName = currentProfile?.owner_name || user?.user_metadata?.name || user?.email || 'Akun';
     if (user) ensureProfileMenu(user);
     const initial = String(displayName).trim().charAt(0).toUpperCase() || 'U';
     document.querySelectorAll('[data-account-avatar]').forEach(el => {
@@ -552,11 +616,17 @@
   function renderProfileMenu(user) {
     const menu = document.querySelector('.profile-menu');
     if (!menu) return;
-    const name = user?.user_metadata?.name || user?.email || 'Akun';
+    const role = currentProfile?.role || user?.user_metadata?.role || 'umkm';
+    const name = currentProfile?.owner_name || user?.user_metadata?.name || user?.email || 'Akun';
     const email = user?.email || '';
     const url = avatarUrl(user);
     const avatar = menu.querySelector('[data-profile-avatar]');
-    if (avatar) avatar.innerHTML = url ? `<img src="${url}" alt="Foto profil">` : '<span aria-hidden="true">👤</span>';
+    if (avatar) {
+      avatar.innerHTML = url ? `<img src="${url}" alt="Foto profil ${escapeHtml(name)}">` : '<span aria-hidden="true">👤</span>';
+      avatar.style.cursor = 'pointer';
+      avatar.title = 'Klik untuk ganti foto profil';
+      avatar.onclick = () => menu.querySelector('[data-avatar-input]')?.click();
+    }
     const nameEl = menu.querySelector('[data-profile-name]');
     const emailEl = menu.querySelector('[data-profile-email]');
     if (nameEl) nameEl.textContent = name;
@@ -566,20 +636,19 @@
     if (!badgeEl && emailEl?.parentNode) {
       badgeEl = document.createElement('div');
       badgeEl.setAttribute('data-profile-badge', 'true');
-      badgeEl.style.cssText = 'margin-top:4px;font-size:11px;font-weight:700;color:#2d6934;background:#edf7ea;padding:3px 8px;border-radius:6px;display:inline-block;';
+      badgeEl.style.cssText = 'margin-top:6px;font-size:11px;font-weight:700;color:#245c32;background:#edf7ea;padding:4px 10px;border-radius:8px;display:inline-block;line-height:1.4;';
       emailEl.parentNode.insertBefore(badgeEl, emailEl.nextSibling);
     }
     if (badgeEl) {
       const storeCode = currentProfile?.store_code || user?.user_metadata?.store_code || '';
       const storeName = currentProfile?.store_name || user?.user_metadata?.store_name || '';
-      const role = currentProfile?.role || user?.user_metadata?.role || 'umkm';
       if (role === 'admin') {
-        badgeEl.textContent = `Owner Toko${storeName ? ' · ' + storeName : ''}${storeCode ? ' (Kode: ' + storeCode + ')' : ''}`;
+        badgeEl.innerHTML = `🏪 <b>Owner Toko</b>${storeName ? ' · ' + escapeHtml(storeName) : ''}${storeCode ? ' <span style="background:#d9f0d3;padding:2px 7px;border-radius:6px;margin-left:4px;color:#184a24;">Kode: ' + escapeHtml(storeCode) + '</span>' : ''}`;
       } else if (role === 'cashier') {
-        badgeEl.textContent = `Kasir${storeCode ? ' · Kode Toko: ' + storeCode : ''}`;
+        badgeEl.innerHTML = `💼 <b>Kasir Toko</b>${storeName ? ' · ' + escapeHtml(storeName) : ''}${storeCode ? ' <span style="background:#d9f0d3;padding:2px 7px;border-radius:6px;margin-left:4px;color:#184a24;">Kode Toko: ' + escapeHtml(storeCode) + '</span>' : ''}`;
       } else {
         const umkmCode = currentProfile?.owner_code || user?.user_metadata?.owner_code || '';
-        badgeEl.textContent = `Mitra UMKM${storeCode ? ' · Toko: ' + storeCode : ''}${umkmCode ? ' (ID: ' + umkmCode + ')' : ''}`;
+        badgeEl.innerHTML = `📦 <b>Mitra UMKM</b>${storeCode ? ' · Toko: ' + escapeHtml(storeCode) : ''}${umkmCode ? ' <span style="background:#d9f0d3;padding:2px 7px;border-radius:6px;margin-left:4px;color:#184a24;">ID: ' + escapeHtml(umkmCode) + '</span>' : ''}`;
       }
     }
   }
@@ -644,6 +713,93 @@
     renderProfileMenu(user);
     document.querySelector('.profile-menu')?.classList.add('show');
     document.querySelector('.profile-menu-backdrop')?.classList.add('show');
+  }
+
+  function updateNavbarAccountDisplay(user) {
+    const isAuth = !!user;
+    const role = currentProfile?.role || user?.user_metadata?.role || 'umkm';
+    const rawName = currentProfile?.owner_name || user?.user_metadata?.name || user?.email || 'Akun';
+    const storeCode = String(currentProfile?.store_code || user?.user_metadata?.store_code || '').trim();
+    const ownerCode = String(currentProfile?.owner_code || user?.user_metadata?.owner_code || '').trim();
+
+    if (user) ensureProfileMenu(user);
+    renderAccountAvatars(user);
+
+    document.querySelectorAll('[data-account-name]').forEach(el => el.textContent = rawName);
+    document.querySelectorAll('[data-account-store-code]').forEach(el => el.textContent = storeCode);
+
+    document.querySelectorAll('a').forEach(link => {
+      const isAccountLink = link.classList.contains('site-account') ||
+        link.classList.contains('login-button') ||
+        link.classList.contains('login-btn') ||
+        link.getAttribute('href') === 'login.html' ||
+        link.getAttribute('href') === '#profile' ||
+        link.getAttribute('href') === '#logout';
+
+      if (!isAccountLink) return;
+
+      const labelEl = link.querySelector('.account-label');
+      const avatarEl = link.querySelector('[data-account-avatar]');
+
+      if (avatarEl) {
+        avatarEl.style.cursor = isAuth ? 'pointer' : 'default';
+        avatarEl.setAttribute('role', isAuth ? 'button' : 'img');
+        avatarEl.setAttribute('tabindex', isAuth ? '0' : '-1');
+        if (isAuth) {
+          avatarEl.onclick = e => { e.preventDefault(); e.stopPropagation(); openProfileMenu(user); };
+          avatarEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProfileMenu(user); } };
+        } else {
+          avatarEl.onclick = null;
+          avatarEl.onkeydown = null;
+        }
+      }
+
+      if (isAuth) {
+        link.href = '#profile';
+        link.onclick = e => {
+          e.preventDefault();
+          openProfileMenu(user);
+        };
+
+        let codeDisplay = '';
+        if (role === 'admin') {
+          codeDisplay = storeCode ? `Kode: ${storeCode}` : '';
+        } else if (role === 'cashier') {
+          codeDisplay = storeCode ? `Toko: ${storeCode}` : '';
+        } else {
+          codeDisplay = storeCode ? `Toko: ${storeCode}` : (ownerCode ? `ID: ${ownerCode}` : '');
+        }
+
+        const nameHtml = `<span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;">${escapeHtml(rawName)}</span>`;
+        const codeHtml = codeDisplay ? `<span style="font-size:10px;font-weight:700;background:rgba(255,255,255,0.25);padding:2px 7px;border-radius:12px;margin-left:4px;letter-spacing:0.4px;white-space:nowrap;display:inline-block;vertical-align:middle;">${escapeHtml(codeDisplay)}</span>` : '';
+
+        if (labelEl) {
+          labelEl.innerHTML = `${nameHtml} ${codeHtml}`;
+        } else {
+          link.innerHTML = `<span class="account-avatar" data-account-avatar></span> ${nameHtml} ${codeHtml}`;
+          renderAccountAvatars(user);
+        }
+        link.setAttribute('aria-label', `Menu profil ${rawName}${codeDisplay ? ' · ' + codeDisplay : ''}`);
+      } else {
+        link.href = 'login.html';
+        link.onclick = null;
+        if (labelEl) labelEl.textContent = 'Masuk';
+        else link.textContent = 'Masuk';
+        link.setAttribute('aria-label', 'Masuk ke akun');
+      }
+    });
+
+    // Tombol ajakan "Mulai Sekarang" pada halaman publik: guest menuju login,
+    // user yang sudah login langsung menuju daftar fitur.
+    document.querySelectorAll('a[href="login.html"]').forEach(link => {
+      const text = link.textContent.trim().toLowerCase();
+      const isAccount = link.classList.contains('login-button') ||
+        link.classList.contains('login-btn') || link.classList.contains('site-account');
+      if (isAuth && !isAccount) {
+        link.href = 'fitur.html';
+        if (text.includes('mulai')) link.innerHTML = 'Buka Fitur <span>→</span>';
+      }
+    });
   }
 
   function setSession(user) {
@@ -775,66 +931,6 @@
         nav.insertBefore(storageLink, nav.querySelector('.site-account') || null);
       }
     }
-    document.querySelectorAll('[data-account-name]').forEach(el => el.textContent = user?.user_metadata?.name || user?.email || 'Akun');
-
-    // Semua tombol/link "Masuk" di seluruh halaman publik berubah menjadi "Logout"
-    // ketika ada session aktif. Link lain seperti "Mulai Sekarang" tetap menuju fitur.
-    const displayName = user?.user_metadata?.name || user?.email || 'Akun';
-    if (user) ensureProfileMenu(user);
-    const initial = String(displayName).trim().charAt(0).toUpperCase() || 'U';
-
-    document.querySelectorAll('a').forEach(link => {
-      const labelEl = link.querySelector('.account-label');
-      const avatarEl = link.querySelector('[data-account-avatar]');
-      const text = (labelEl?.textContent || link.textContent).trim().replace(/\s+/g, ' ').toLowerCase();
-      const isLoginLink = link.classList.contains('login-button') ||
-        link.classList.contains('login-btn') ||
-        link.classList.contains('site-account') ||
-        link.getAttribute('href') === 'login.html';
-      const isMasukLink = isLoginLink && text.includes('masuk');
-      if (avatarEl) {
-        renderAccountAvatars(user);
-        avatarEl.style.cursor = user ? 'pointer' : 'default';
-        avatarEl.setAttribute('role', user ? 'button' : 'img');
-        avatarEl.setAttribute('tabindex', user ? '0' : '-1');
-        if (user) {
-          avatarEl.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openProfileMenu(user); });
-          avatarEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProfileMenu(user); } });
-        }
-      }
-
-      if (user && isMasukLink) {
-        if (labelEl) labelEl.textContent = 'Logout'; else link.textContent = 'Logout';
-        link.href = '#logout';
-        link.setAttribute('aria-label', `Logout dari akun ${displayName}`);
-        link.onclick = async e => {
-          if (e.target.closest('[data-account-avatar]')) { e.preventDefault(); return; }
-          e.preventDefault();
-          try { await logout(); }
-          catch (error) {
-            console.error('Logout gagal:', error);
-            window.dispatchEvent(new CustomEvent('kasir:cloud-error', { detail: { message: error?.message || 'Logout gagal.' } }));
-          }
-        };
-      } else if (!user && isLoginLink) {
-        if (labelEl) labelEl.textContent = 'Masuk'; else link.textContent = 'Masuk';
-        link.href = 'login.html';
-        link.onclick = null;
-        link.setAttribute('aria-label', 'Masuk ke akun');
-      }
-    });
-
-    // Tombol ajakan "Mulai Sekarang" pada halaman publik: guest menuju login,
-    // user yang sudah login langsung menuju daftar fitur.
-    document.querySelectorAll('a[href="login.html"]').forEach(link => {
-      const text = link.textContent.trim().toLowerCase();
-      const isMasuk = text.includes('masuk') || link.classList.contains('login-button') ||
-        link.classList.contains('login-btn') || link.classList.contains('site-account');
-      if (user && !isMasuk) {
-        link.href = 'fitur.html';
-        if (text.includes('mulai')) link.innerHTML = 'Buka Fitur <span>→</span>';
-      }
-    });
-
+    updateNavbarAccountDisplay(user);
   });
 })();

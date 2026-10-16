@@ -31,11 +31,13 @@ create table if not exists public.user_profiles (
   owner_code text unique check (owner_code is null or owner_code ~ '^[0-9]{4}$'),
   store_name text not null default '',
   store_code text,
+  avatar_url text,
   created_at timestamptz not null default now()
 );
 
 alter table public.user_profiles add column if not exists store_name text not null default '';
 alter table public.user_profiles add column if not exists store_code text;
+alter table public.user_profiles add column if not exists avatar_url text;
 
 create or replace function public.is_inventory_admin()
 returns boolean
@@ -78,30 +80,52 @@ declare
   req_role text;
   s_name text;
   s_code text;
+  av_url text;
 begin
   req_role := coalesce(nullif(trim(new.raw_user_meta_data ->> 'role'), ''), 'umkm');
   s_name := coalesce(nullif(trim(new.raw_user_meta_data ->> 'store_name'), ''), '');
   s_code := coalesce(nullif(trim(new.raw_user_meta_data ->> 'store_code'), ''), '');
+  av_url := coalesce(nullif(trim(new.raw_user_meta_data ->> 'avatar_url'), ''), null);
 
   -- 1. OWNER TOKO (Admin) atau Kasir
   if req_role in ('admin', 'cashier') then
-    insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code)
+    insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code, avatar_url)
     values (
       new.id,
       req_role,
       coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)),
       null,
       s_name,
-      nullif(s_code, '')
+      nullif(upper(s_code), ''),
+      av_url
     )
     on conflict (user_id) do update set
       role = excluded.role,
       store_name = coalesce(nullif(excluded.store_name, ''), public.user_profiles.store_name),
-      store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code);
+      store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code),
+      avatar_url = coalesce(nullif(excluded.avatar_url, ''), public.user_profiles.avatar_url);
     return new;
   end if;
 
   -- 2. UMKM PENITIP
+  if s_code <> '' then
+    -- Pastikan kode toko terdaftar dan milik owner toko yang sah
+    if not exists (
+      select 1 from public.user_profiles
+      where upper(store_code) = upper(s_code)
+        and role in ('admin', 'cashier')
+    ) then
+      raise exception 'Kode Toko "%" tidak ditemukan. Pastikan kode toko sesuai dengan milik Owner Toko.', s_code;
+    end if;
+
+    if s_name = '' then
+      select store_name into s_name
+      from public.user_profiles
+      where upper(store_code) = upper(s_code) and role in ('admin', 'cashier')
+      limit 1;
+    end if;
+  end if;
+
   new_code := nullif(trim(new.raw_user_meta_data ->> 'owner_code'), '');
   if new_code is not null then
     if new_code !~ '^[0-9]{4}$' then
@@ -142,17 +166,19 @@ begin
     end loop;
   end if;
 
-  insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code)
+  insert into public.user_profiles (user_id, role, owner_name, owner_code, store_name, store_code, avatar_url)
   values (
     new.id,
     'umkm',
     coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), split_part(new.email, '@', 1)),
     new_code,
     s_name,
-    nullif(s_code, '')
+    nullif(upper(s_code), ''),
+    av_url
   )
   on conflict (user_id) do update set
-    store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code);
+    store_code = coalesce(nullif(excluded.store_code, ''), public.user_profiles.store_code),
+    avatar_url = coalesce(nullif(excluded.avatar_url, ''), public.user_profiles.avatar_url);
   return new;
 end;
 $$;
@@ -226,9 +252,17 @@ create policy "user_data_admin_delete" on public.user_data for delete using (pub
 
 drop policy if exists "user_profiles_select_self_or_admin" on public.user_profiles;
 drop policy if exists "user_profiles_update_admin" on public.user_profiles;
+drop policy if exists "user_profiles_update_own" on public.user_profiles;
+
 create policy "user_profiles_select_self_or_admin"
 on public.user_profiles for select
 using (auth.uid() = user_id or public.is_inventory_admin());
+
+create policy "user_profiles_update_own"
+on public.user_profiles for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
 create policy "user_profiles_update_admin"
 on public.user_profiles for update
 using (public.is_system_admin())
@@ -388,11 +422,12 @@ as $$
 declare
   caller_role text;
   caller_owner_code text;
+  caller_store_code text;
   cash_entries jsonb := '[]'::jsonb;
   sale_items jsonb := '[]'::jsonb;
 begin
-  select p.role, p.owner_code
-    into caller_role, caller_owner_code
+  select p.role, p.owner_code, p.store_code
+    into caller_role, caller_owner_code, caller_store_code
   from public.user_profiles p
   where p.user_id = (select auth.uid());
 
@@ -410,7 +445,13 @@ begin
     cross join lateral jsonb_array_elements(
       case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
     ) as entry(value)
-    where d.key = 'cash';
+    where d.key = 'cash'
+      and (
+        d.user_id = (select auth.uid())
+        or (caller_store_code is not null and caller_store_code <> '' and d.user_id in (
+          select p2.user_id from public.user_profiles p2 where upper(p2.store_code) = upper(caller_store_code)
+        ))
+      );
   end if;
 
   select coalesce(
@@ -442,7 +483,13 @@ begin
     end
   ) as item(value)
   where d.key = 'sales'
-    and caller_role in ('admin', 'cashier');
+    and caller_role in ('admin', 'cashier')
+    and (
+      d.user_id = (select auth.uid())
+      or (caller_store_code is not null and caller_store_code <> '' and d.user_id in (
+        select p2.user_id from public.user_profiles p2 where upper(p2.store_code) = upper(caller_store_code)
+      ))
+    );
 
   return jsonb_build_object('cash', cash_entries, 'sales', sale_items);
 end;
