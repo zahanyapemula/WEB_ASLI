@@ -2,12 +2,12 @@
 (() => {
   const SUPABASE_URL = 'https://pktvmwqyddxrhevvpuoo.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_n1tyrcD0OwXVHFQ3lPZaow_P2nx7J7E';
-  const DATA_NAMES = ['products','sales','cash','expenses'];
+  const DATA_NAMES = ['products', 'sales', 'cash', 'expenses'];
   const SESSION_KEY = 'kasirTokoSupabaseSession';
   const CURRENT_KEY = 'kasirTokoCurrentUser';
   const LOGIN_KEY = 'kasirTokoLoggedIn';
-  const publicPages = ['index.html','login.html','register.html','register-toko.html','panduan.html','tentang.html','kontak.html','reset-password.html',''];
-  const protectedPages = ['dashboard.html','kasir.html','produk.html','storage.html','buku-kas.html','perbandingan.html','scan-ingredient.html'];
+  const publicPages = ['index.html', 'login.html', 'register.html', 'register-toko.html', 'panduan.html', 'tentang.html', 'kontak.html', 'reset-password.html', ''];
+  const protectedPages = ['dashboard.html', 'kasir.html', 'produk.html', 'storage.html', 'buku-kas.html', 'perbandingan.html', 'scan-ingredient.html'];
   const file = (location.pathname.split('/').pop() || '').toLowerCase();
   let hydrating = false;
   let session = null;
@@ -18,7 +18,7 @@
 
   const jsonError = async response => {
     let body = null;
-    try { body = await response.json(); } catch {}
+    try { body = await response.json(); } catch { }
     const message = body?.msg || body?.message || body?.error_description || body?.error || `HTTP ${response.status}`;
     const error = new Error(message);
     error.status = response.status;
@@ -93,11 +93,11 @@
 
   const pendingProductSaves = new Set();
   const originalSetItem = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function(key, value) {
+  localStorage.setItem = function (key, value) {
     originalSetItem(key, value);
     if (!hydrating && currentUser && DATA_NAMES.some(n => key === localKey(n))) {
       let parsed = value;
-      try { parsed = JSON.parse(value); } catch {}
+      try { parsed = JSON.parse(value); } catch { }
       const name = DATA_NAMES.find(n => key === localKey(n));
       if (name) {
         const pending = saveCloud(name, parsed);
@@ -193,7 +193,10 @@
       error = fallback.error;
     }
     if (error) throw error;
-    if (!data) throw new Error('Profil akun belum tersedia. Jalankan migrasi supabase_schema.sql di Supabase.');
+    if (!data) {
+      currentProfile = null;
+      return null;
+    }
 
     if (!data.store_code && currentUser?.user_metadata?.store_code) {
       data.store_code = currentUser.user_metadata.store_code;
@@ -363,26 +366,47 @@
   }
 
   async function restoreSession() {
-    const { data, error } = await client.auth.getSession();
-    if (error) throw error;
-    session = data.session;
-    currentUser = session?.user || null;
-    if (!currentUser) {
+    try {
+      const { data, error } = await client.auth.getSession();
+      if (error) throw error;
+      session = data?.session;
+      currentUser = session?.user || null;
+      if (!currentUser) {
+        currentProfile = null;
+        localStorage.removeItem(CURRENT_KEY);
+        localStorage.removeItem(LOGIN_KEY);
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      writeLocal(SESSION_KEY, session);
+      writeLocal(CURRENT_KEY, currentUser);
+      originalSetItem(LOGIN_KEY, 'true');
+      await loadProfile(currentUser.id);
+      if (!currentProfile) {
+        console.warn('Profil akun tidak ditemukan di database (mungkin database baru saja direset). Sesi lama dibersihkan.');
+        currentUser = null;
+        session = null;
+        localStorage.removeItem(CURRENT_KEY);
+        localStorage.removeItem(LOGIN_KEY);
+        localStorage.removeItem(SESSION_KEY);
+        await client.auth.signOut().catch(() => {});
+        return null;
+      }
+      if (currentProfile?.role === 'umkm') {
+        clearUmkmLocalData();
+      }
+      await hydrateCloud();
+      return currentUser;
+    } catch (err) {
+      console.warn('Gagal memulihkan sesi akun lama:', err?.message);
+      currentUser = null;
+      session = null;
       currentProfile = null;
       localStorage.removeItem(CURRENT_KEY);
       localStorage.removeItem(LOGIN_KEY);
       localStorage.removeItem(SESSION_KEY);
       return null;
     }
-    writeLocal(SESSION_KEY, session);
-    writeLocal(CURRENT_KEY, currentUser);
-    originalSetItem(LOGIN_KEY, 'true');
-    await loadProfile(currentUser.id);
-    if (currentProfile?.role === 'umkm') {
-      clearUmkmLocalData();
-    }
-    await hydrateCloud();
-    return currentUser;
   }
 
   async function signUp(email, password, name, extra = {}) {
@@ -413,6 +437,9 @@
     }
     currentUser = data.user;
     await loadProfile(currentUser.id);
+    if (!currentProfile) {
+      throw new Error('Profil akun belum tersedia. Jalankan migrasi supabase_schema.sql di Supabase agar trigger aktif.');
+    }
     writeLocal(SESSION_KEY, session);
     writeLocal(CURRENT_KEY, currentUser);
     originalSetItem(LOGIN_KEY, 'true');
@@ -514,7 +541,7 @@
   }
 
   function escapeHtml(value) {
-    return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    return String(value).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
   }
 
   function closeProfileMenu() {
@@ -564,7 +591,7 @@
     backdrop.addEventListener('click', closeProfileMenu);
     const menu = document.createElement('aside');
     menu.className = 'profile-menu';
-    menu.setAttribute('aria-label','Menu Profil');
+    menu.setAttribute('aria-label', 'Menu Profil');
     menu.innerHTML = `
       <div class="profile-menu-head">
         <div class="profile-menu-avatar" data-profile-avatar><span aria-hidden="true">👤</span></div>
@@ -704,14 +731,18 @@
       }
       notice.textContent = `Sinkronisasi gagal; perubahan belum dipastikan tersimpan: ${event.detail?.message || 'Periksa koneksi Supabase.'}`;
     });
-    try { await ready; } catch (error) {
-      console.error('Supabase:', error);
-      const notice = document.createElement('div');
-      notice.setAttribute('role', 'alert');
-      notice.style.cssText = 'position:fixed;z-index:9999;top:12px;left:12px;right:12px;padding:12px 16px;border-radius:10px;background:#fff0ef;color:#9f2924;font:600 13px system-ui;box-shadow:0 4px 18px #0002';
-      notice.textContent = `Autentikasi/data gagal dimuat: ${error?.message || 'Periksa koneksi dan migrasi Supabase.'}`;
-      document.body.prepend(notice);
-      return;
+    try {
+      await ready;
+    } catch (error) {
+      console.warn('Supabase auth ready:', error);
+      if (!publicPages.includes(file)) {
+        const notice = document.createElement('div');
+        notice.setAttribute('role', 'alert');
+        notice.style.cssText = 'position:fixed;z-index:9999;top:12px;left:12px;right:12px;padding:12px 16px;border-radius:10px;background:#fff0ef;color:#9f2924;font:600 13px system-ui;box-shadow:0 4px 18px #0002';
+        notice.textContent = `Autentikasi/data gagal dimuat: ${error?.message || 'Periksa koneksi dan migrasi Supabase.'}`;
+        document.body.prepend(notice);
+        return;
+      }
     }
     const user = current();
     if (protectedPages.includes(file) && !user) {
@@ -757,9 +788,9 @@
       const avatarEl = link.querySelector('[data-account-avatar]');
       const text = (labelEl?.textContent || link.textContent).trim().replace(/\s+/g, ' ').toLowerCase();
       const isLoginLink = link.classList.contains('login-button') ||
-                          link.classList.contains('login-btn') ||
-                          link.classList.contains('site-account') ||
-                          link.getAttribute('href') === 'login.html';
+        link.classList.contains('login-btn') ||
+        link.classList.contains('site-account') ||
+        link.getAttribute('href') === 'login.html';
       const isMasukLink = isLoginLink && text.includes('masuk');
       if (avatarEl) {
         renderAccountAvatars(user);

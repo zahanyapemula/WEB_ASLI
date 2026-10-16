@@ -1,3 +1,17 @@
+-- ==============================================================
+-- OPSIONAL: SCRIPT HAPUS TOTAL SEMUA DATA & USER (RESET DATABASE)
+-- Jika ingin menghapus semua akun, toko, dan data untuk mulai dari awal:
+--
+-- set session_replication_role = 'replica';
+-- truncate table public.stock_movements cascade;
+-- truncate table public.owner_settlements cascade;
+-- truncate table public.user_data cascade;
+-- truncate table public.user_profiles cascade;
+-- delete from storage.objects where bucket_id = 'avatars';
+-- delete from auth.users;
+-- set session_replication_role = 'origin';
+-- ==============================================================
+
 -- Jalankan SEKALI di Supabase Dashboard -> SQL Editor.
 -- Data cloud Web PKM dipisahkan berdasarkan auth.users.id.
 create table if not exists public.user_data (
