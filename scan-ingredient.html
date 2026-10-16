@@ -74,6 +74,17 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .scanner-box{display:grid;grid-template-columns:1fr 100px;gap:9px}.ingredient-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#fff}.ingredient-card h4{margin:0 0 8px}.ingredient-list{display:grid;gap:7px}.ingredient{display:flex;justify-content:space-between;padding:9px 10px;background:var(--soft2);border-radius:10px;font-size:11px}
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
+</style>
+<style>
+/* Camera scanner */
+#camWrap{margin-top:12px;border-radius:14px;overflow:hidden;border:2px solid var(--green);display:none;position:relative;background:#000}
+#camWrap.open{display:block}
+#reader{width:100%;min-height:180px}
+#camStatus{font-size:11px;color:var(--muted);margin-top:6px;text-align:center}
+.cam-btn-row{display:flex;gap:8px;margin-top:10px}
+.cam-btn-row .btn{flex:1;font-size:11px;padding:9px 10px}
+.scan-pulse{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:160px;height:160px;border:3px solid var(--green);border-radius:12px;pointer-events:none;animation:pulse-box 1.2s ease-in-out infinite}
+@keyframes pulse-box{0%,100%{opacity:1;box-shadow:0 0 0 0 #55b94f55}50%{opacity:.7;box-shadow:0 0 0 8px #55b94f00}}
 </style>    <script src="auth.js"></script>
 <link rel="stylesheet" href="shared-navbar.css">
 </head><body><div class="app">
@@ -90,6 +101,14 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div class="card"><div class="title"><h3>Input Kode / Nama Produk</h3><span class="tag">Cari Ingredient</span></div>
 <label class="label">🔢 Kode Produk / Barcode (Scan atau Ketik)</label>
 <div class="scanner-box"><input id="scan" placeholder="Masukkan Kode Produk 4 digit atau barcode"><button id="search" class="btn primary">🔎 Cari</button></div>
+<div class="cam-btn-row">
+  <button id="btnCam" class="btn yellow" onclick="toggleCamera()">📷 Buka Kamera Scan</button>
+</div>
+<div id="camWrap">
+  <div id="reader"></div>
+  <div class="scan-pulse"></div>
+  <div id="camStatus">Menginisialisasi kamera...</div>
+</div>
 <div style="margin-top:11px">
   <label class="label">🔤 Cari Berdasarkan Nama Produk</label>
   <div class="scanner-box"><input id="scanName" placeholder="Ketik nama produk..."><button id="searchName" class="btn secondary">🔍 Cari Nama</button></div>
@@ -169,5 +188,66 @@ window.findIngredient=find;
 window.addEventListener("storage",()=>{products=load(STORE.products,[]);render()});
 render();
 });
-</script><script src="shared-navbar.js"></script>
+</script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+let html5QrCode=null;
+let camOpen=false;
+function toggleCamera(){
+  if(camOpen){stopCamera();}else{startCamera();}
+}
+function startCamera(){
+  const wrap=document.getElementById('camWrap');
+  const btn=document.getElementById('btnCam');
+  const status=document.getElementById('camStatus');
+  wrap.classList.add('open');
+  btn.textContent='⏹ Tutup Kamera';
+  btn.className='btn danger';
+  camOpen=true;
+  status.textContent='Menginisialisasi kamera...';
+  html5QrCode=new Html5Qrcode('reader');
+  Html5Qrcode.getCameras().then(devices=>{
+    if(!devices||devices.length===0){status.textContent='❌ Kamera tidak ditemukan.';stopCamera();return;}
+    // prefer back camera
+    const cam=devices.find(d=>/back|rear|environment/i.test(d.label))||devices[devices.length-1];
+    status.textContent='📷 Kamera aktif — arahkan ke barcode...';
+    html5QrCode.start(
+      cam.id,
+      {fps:12,qrbox:{width:200,height:120},aspectRatio:1.6},
+      (decodedText)=>{
+        // barcode berhasil dibaca
+        document.getElementById('scan').value=decodedText;
+        status.textContent='✅ Terbaca: '+decodedText;
+        stopCamera();
+        // cari produk
+        if(window.findIngredient) window.findIngredient(decodedText);
+      },
+      ()=>{}
+    ).catch(err=>{
+      status.textContent='❌ Gagal akses kamera: '+err;
+    });
+  }).catch(err=>{
+    status.textContent='❌ Tidak bisa akses kamera: '+err;
+    stopCamera();
+  });
+}
+function stopCamera(){
+  const wrap=document.getElementById('camWrap');
+  const btn=document.getElementById('btnCam');
+  const status=document.getElementById('camStatus');
+  if(html5QrCode){
+    html5QrCode.stop().catch(()=>{}).finally(()=>{
+      html5QrCode.clear();
+      html5QrCode=null;
+    });
+  }
+  wrap.classList.remove('open');
+  btn.textContent='📷 Buka Kamera Scan';
+  btn.className='btn yellow';
+  camOpen=false;
+}
+// Auto stop camera when navigating away
+window.addEventListener('beforeunload',()=>{if(html5QrCode)html5QrCode.stop().catch(()=>{});});
+</script>
+<script src="shared-navbar.js"></script>
 </body></html>
