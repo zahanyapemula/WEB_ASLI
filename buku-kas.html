@@ -123,7 +123,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;margin-bottom:12px"><input id="search" placeholder="Cari transaksi..."><select id="month"><option value="all">Semua Bulan</option></select></div><div class="table"><table class="ledger-table"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan per Produk</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table recap-table"><table><thead><tr><th>UMKM</th><th>Produk</th><th>Dititip pada tanggal (unit)</th><th>Laku (unit)</th><th>Belum laku dari titipan (unit)</th><th>Sisa stok (unit)</th><th>Harus dibayar untuk produk</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada produk titipan atau penjualan pada tanggal ini.</div></div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan per Produk</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table recap-table"><table><thead><tr><th>UMKM</th><th>Produk</th><th>Dititip pada tanggal (unit)</th><th>Laku (unit)</th><th>Belum laku dari titipan (unit)</th><th>Sisa stok (unit)</th><th>Harus dibayar (HPP / Modal)</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada produk titipan atau penjualan pada tanggal ini.</div></div></div>
 </div>
 <div>
 <div class="card"><div class="title"><h3>Rekap Bulanan</h3><span class="tag">Otomatis</span></div><div id="months" class="months"></div><div id="monthEmpty" class="empty">Belum ada data.</div></div>
@@ -205,68 +205,99 @@ function renderConsignmentRecap(){
   if(id)return `id:${id}`;
   return `name:${String(item.ownerCode||item.owner_code||"")}:${String(item.name||item.product_name||"").trim().toLowerCase()}`;
  };
- const ensureProduct=(code,name,item={})=>{
-  code=String(code||"");
-  if(!/^\d{4}$/.test(code))return null;
-  const key=`${code}:${productKey(item)}`;
-  if(!products.has(key))products.set(key,{
-   ownerCode:code,ownerName:name||`UMKM ${code}`,
-   productName:item.name||item.product_name||"Produk tanpa nama",
-   productCode:item.code||item.productCode||item.product_code||item.barcode||"",
-   deposited:0,sold:0,revenue:0,remaining:0,hasMovement:false,
-   currentStock:null,createdAt:item.createdAt||item.created_at||""
+  const ensureProduct=(code,name,item={})=>{
+   code=String(code||"");
+   if(!/^\d{4}$/.test(code))return null;
+   const key=`${code}:${productKey(item)}`;
+   if(!products.has(key))products.set(key,{
+    ownerCode:code,ownerName:name||`UMKM ${code}`,
+    productName:item.name||item.product_name||"Produk tanpa nama",
+    productCode:item.code||item.productCode||item.product_code||item.barcode||"",
+    unitCost:Number(item.cost||0),
+    unitPrice:Number(item.price||0),
+    deposited:0,sold:0,costTotal:0,revenue:0,remaining:0,hasMovement:false,
+    currentStock:null,createdAt:item.createdAt||item.created_at||""
+   });
+   const product=products.get(key);
+   if(name)product.ownerName=name;
+   if(item.name||item.product_name)product.productName=item.name||item.product_name;
+   if(item.code||item.productCode||item.product_code||item.barcode)product.productCode=item.code||item.productCode||item.product_code||item.barcode;
+   if(item.createdAt||item.created_at)product.createdAt=item.createdAt||item.created_at;
+   if(!product.unitCost&&Number(item.cost||0))product.unitCost=Number(item.cost||0);
+   if(!product.unitPrice&&Number(item.price||0))product.unitPrice=Number(item.price||0);
+   return product;
+  };
+  inventoryProducts.forEach(item=>{
+   if(day!==today()&&item.createdAt&&dateInWita(item.createdAt)>day)return;
+   const product=ensureProduct(item.ownerCode||item.owner_code,item.owner||item.owner_name,item);
+   if(product){
+    product.currentStock=Math.max(0,Number(item.stock)||0);
+    if(Number(item.cost||0))product.unitCost=Number(item.cost||0);
+    if(Number(item.price||0))product.unitPrice=Number(item.price||0);
+   }
   });
-  const product=products.get(key);
-  if(name)product.ownerName=name;
-  if(item.name||item.product_name)product.productName=item.name||item.product_name;
-  if(item.code||item.productCode||item.product_code||item.barcode)product.productCode=item.code||item.productCode||item.product_code||item.barcode;
-  if(item.createdAt||item.created_at)product.createdAt=item.createdAt||item.created_at;
-  return product;
- };
- inventoryProducts.forEach(item=>{
-  if(day!==today()&&item.createdAt&&dateInWita(item.createdAt)>day)return;
-  const product=ensureProduct(item.ownerCode||item.owner_code,item.owner||item.owner_name,item);
-  if(product)product.currentStock=Math.max(0,Number(item.stock)||0);
- });
- bookkeeping.sales.forEach(item=>{
-  if(dateInWita(item.date)!==day)return;
-  const product=ensureProduct(item.owner_code,item.owner_name,item);
-  if(!product)return;
-  const quantity=Number(item.qty)||0;
-  product.sold+=quantity;
-  product.revenue+=Number(item.total)||Number(item.price||0)*quantity;
- });
- stockMovements.forEach(movement=>{
-  const product=ensureProduct(movement.owner_code,movement.owner_name,{
-   id:movement.product_id,code:movement.product_code,name:movement.product_name
+  bookkeeping.sales.forEach(item=>{
+   if(dateInWita(item.date)!==day)return;
+   const product=ensureProduct(item.owner_code,item.owner_name,item);
+   if(!product)return;
+   const quantity=Number(item.qty)||0;
+   product.sold+=quantity;
+
+   // Dapatkan Harga Modal / HPP per unit (Rp)
+   let unitCost=Number(item.cost||0);
+   if(!unitCost&&product.unitCost){
+    unitCost=product.unitCost;
+   }
+   if(!unitCost){
+    const matched=inventoryProducts.find(p=>
+     (item.code&&(p.code===item.code||p.productCode===item.code))||
+     (item.barcode&&p.barcode===item.barcode)||
+     (item.id&&p.id===item.id)||
+     (p.name&&item.name&&p.name.trim().toLowerCase()===item.name.trim().toLowerCase())
+    );
+    if(matched&&Number(matched.cost||0)){
+     unitCost=Number(matched.cost||0);
+     product.unitCost=unitCost;
+    }
+   }
+
+   // Hitung kewajiban bayar ke UMKM berdasarkan Harga Modal / HPP per unit (bukan Harga Jual toko)
+   product.costTotal=(product.costTotal||0)+(unitCost*quantity);
+   product.revenue=product.costTotal;
   });
-  if(!product)return;
-  const at=Date.parse(movement.occurred_at),quantity=Number(movement.quantity)||0;
-  if(!Number.isFinite(at)||at>=end)return;
-  product.hasMovement=true;
-  if(at>=start&&["opening","stock_in"].includes(movement.movement_type))product.deposited+=quantity;
-  if(["opening","stock_in"].includes(movement.movement_type))product.remaining+=quantity;
-  else product.remaining-=quantity;
- });
- const rows=[...products.values()].filter(product=>!filter||product.ownerCode===filter)
-  .sort((a,b)=>a.ownerCode.localeCompare(b.ownerCode)||a.productName.localeCompare(b.productName,"id"))
-  .map(product=>{
-   const remaining=day===today()&&product.currentStock!==null
-    ?product.currentStock
-    :product.hasMovement?Math.max(0,product.remaining):null;
-   const unsold=Math.max(0,product.deposited-product.sold);
-   return `<tr><td class="owner-cell" data-label="UMKM"><div><b>${esc(product.ownerName)}</b><div class="small">Kode ${esc(product.ownerCode)}</div></div></td><td class="product-cell" data-label="Produk"><div><b>${esc(product.productName)}</b><div class="small">${esc(product.productCode||"—")}</div></div></td><td data-label="Dititip">${product.deposited}</td><td data-label="Laku">${product.sold}</td><td data-label="Belum laku">${unsold}</td><td data-label="Sisa stok">${remaining===null?"—":remaining}</td><td class="pay-cell money in" data-label="Harus dibayar">${rp(product.revenue)}</td></tr>`;
- });
- $("recapRows").innerHTML=rows.join("");
- $("recapEmpty").style.display=rows.length?"none":"block";
- const firstMovement=stockMovements.map(item=>item.occurred_at).filter(Boolean).sort()[0];
- const coverage=firstMovement
-  ?start<Date.parse(firstMovement)
-   ?" Mutasi stok belum tercatat pada tanggal tersebut; jumlah titipan dan sisa bisa tidak lengkap."
-   :` Riwayat mutasi tersedia sejak ${fmtDate(firstMovement)}.`
-  :" Belum ada riwayat mutasi stok; jumlah titipan dan sisa belum dapat dihitung.";
- const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
- $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · setiap produk memiliki baris sendiri; pembayaran dihitung dari jumlah penjualan produk tersebut pada tanggal ini. "Belum laku dari titipan" adalah titipan tanggal ini dikurangi unit terjual. Sisa stok memakai stok Storage untuk hari ini atau mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
+  stockMovements.forEach(movement=>{
+   const product=ensureProduct(movement.owner_code,movement.owner_name,{
+    id:movement.product_id,code:movement.product_code,name:movement.product_name
+   });
+   if(!product)return;
+   const at=Date.parse(movement.occurred_at),quantity=Number(movement.quantity)||0;
+   if(!Number.isFinite(at)||at>=end)return;
+   product.hasMovement=true;
+   if(at>=start&&["opening","stock_in"].includes(movement.movement_type))product.deposited+=quantity;
+   if(["opening","stock_in"].includes(movement.movement_type))product.remaining+=quantity;
+   else product.remaining-=quantity;
+  });
+  const rows=[...products.values()].filter(product=>!filter||product.ownerCode===filter)
+   .sort((a,b)=>a.ownerCode.localeCompare(b.ownerCode)||a.productName.localeCompare(b.productName,"id"))
+   .map(product=>{
+    const remaining=day===today()&&product.currentStock!==null
+     ?product.currentStock
+     :product.hasMovement?Math.max(0,product.remaining):null;
+    const unsold=Math.max(0,product.deposited-product.sold);
+    const hppLabel=product.unitCost?`HPP: ${rp(product.unitCost)}`:'';
+    const productSub=[product.productCode||"—",hppLabel].filter(Boolean).join(" · ");
+    return `<tr><td class="owner-cell" data-label="UMKM"><div><b>${esc(product.ownerName)}</b><div class="small">Kode ${esc(product.ownerCode)}</div></div></td><td class="product-cell" data-label="Produk"><div><b>${esc(product.productName)}</b><div class="small">${esc(productSub)}</div></div></td><td data-label="Dititip">${product.deposited}</td><td data-label="Laku">${product.sold}</td><td data-label="Belum laku">${unsold}</td><td data-label="Sisa stok">${remaining===null?"—":remaining}</td><td class="pay-cell money in" data-label="Harus dibayar (HPP)">${rp(product.revenue)}</td></tr>`;
+  });
+  $("recapRows").innerHTML=rows.join("");
+  $("recapEmpty").style.display=rows.length?"none":"block";
+  const firstMovement=stockMovements.map(item=>item.occurred_at).filter(Boolean).sort()[0];
+  const coverage=firstMovement
+   ?start<Date.parse(firstMovement)
+    ?" Mutasi stok belum tercatat pada tanggal tersebut; jumlah titipan dan sisa bisa tidak lengkap."
+    :` Riwayat mutasi tersedia sejak ${fmtDate(firstMovement)}.`
+   :" Belum ada riwayat mutasi stok; jumlah titipan dan sisa belum dapat dihitung.";
+  const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
+  $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · setiap produk memiliki baris sendiri; pembayaran dihitung dari Harga Modal atau HPP per unit dikali unit yang laku pada tanggal ini (bukan harga jual toko). "Belum laku dari titipan" adalah titipan tanggal ini dikurangi unit terjual. Sisa stok memakai stok Storage untuk hari ini atau mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
 }
 async function loadBookkeeping(){
  $("bookkeepingNotice").textContent="Memuat data Buku Kas sesuai hak akses...";

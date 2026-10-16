@@ -1,18 +1,4 @@
--- ==============================================================
--- SCRIPT RESET TOTAL DATABASE (HAPUS SEMUA DATA & AKUN)
--- Jalankan di: Supabase Dashboard -> SQL Editor -> New Query -> Run
--- 
--- PERINGATAN:
--- Perintah di bawah ini akan MENGHAPUS BERSIH / TOTAL:
--- 1. Semua akun login (auth.users)
--- 2. Semua profil toko & UMKM (user_profiles)
--- 3. Semua produk, kasir, transaksi, buku kas (user_data)
--- 4. Semua riwayat mutasi stok (stock_movements)
--- 5. Semua status pembayaran titipan (owner_settlements)
--- 6. Semua foto profil yang diunggah (storage.objects avatars)
--- ==============================================================
-
--- 1. Matikan sementara pengecekan foreign key agar tidak ada hambatan urutan
+  -- 1. Matikan sementara pengecekan foreign key agar tidak ada hambatan urutan
 set session_replication_role = 'replica';
 
 -- 2. Hapus bersih seluruh tabel data aplikasi
