@@ -85,10 +85,17 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <a href="login.html" class="site-account login-button"><span class="account-avatar" data-account-avatar>U</span><span class="account-label">Masuk</span></a>
 </nav></div></header>
 
-<div class="hero"><h2><span>Temukan Informasi</span> Produk</h2><p>Input Kode Identifikasi Barcode Produk untuk melihat bahan/ingredient yang sudah dimasukkan di Storage. Fitur ini membaca Kode yang sama dengan Produk dan Kasir.</p><div class="note">🧪 Produk → Storage isi ingredient → Kode dipindai di sini → ingredient muncul.</div></div>
+<div class="hero"><h2><span>Temukan Informasi</span> Produk</h2><p>Input Kode Identifikasi Barcode Produk atau cari berdasarkan Nama Produk untuk melihat bahan/ingredient yang sudah dimasukkan di Storage. Fitur ini membaca Kode yang sama dengan Produk dan Kasir.</p><div class="note">🧪 Produk → Storage isi ingredient → Kode dipindai / nama dicari di sini → ingredient muncul.</div></div>
 <div class="grid">
-<div class="card"><div class="title"><h3>Input Kode</h3><span class="tag">Cari Ingredient</span></div><div class="scanner-box"><input id="scan" placeholder="Masukkan Kode Produk 4 digit atau barcode"><button id="search" class="btn primary">🔎 Cari</button></div><div style="margin-top:14px"></div></div>
-<div class="card"><div class="title"><h3>Informasi Produk</h3></div><div id="result" class="empty">Belum ada kode yang diinput.</div></div>
+<div class="card"><div class="title"><h3>Input Kode / Nama Produk</h3><span class="tag">Cari Ingredient</span></div>
+<label class="label">🔢 Kode Produk / Barcode (Scan atau Ketik)</label>
+<div class="scanner-box"><input id="scan" placeholder="Masukkan Kode Produk 4 digit atau barcode"><button id="search" class="btn primary">🔎 Cari</button></div>
+<div style="margin-top:11px">
+  <label class="label">🔤 Cari Berdasarkan Nama Produk</label>
+  <div class="scanner-box"><input id="scanName" placeholder="Ketik nama produk..."><button id="searchName" class="btn secondary">🔍 Cari Nama</button></div>
+</div>
+<div style="margin-top:14px"></div></div>
+<div class="card"><div class="title"><h3>Informasi Produk</h3></div><div id="result" class="empty">Belum ada kode atau nama yang diinput.</div></div>
 </div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Produk dengan Ingredient</h3></div><div id="cards" class="product-grid"></div></div>
 
@@ -110,10 +117,57 @@ const toast=s=>{let t=$("toast");if(!t)return;t.textContent=s;t.classList.add("s
 const fmtDate=d=>new Date(d).toLocaleDateString("id-ID",{day:"2-digit",month:"2-digit",year:"numeric"});
 
 let products=load(STORE.products,[]);
-function find(code){const query=String(code).trim().toLowerCase();let p=products.find(x=>[x.code,x.productCode,x.barcode].some(value=>String(value||'').trim().toLowerCase()===query));if(!p){$("result").innerHTML='<div class="empty">Kode Produk atau barcode tidak ditemukan.</div>';return}let ing=p.ingredients||[];$("result").innerHTML=`<div class="ingredient-card"><h4>🧾 ${esc(p.name)}</h4><div class="small">Kode Produk: ${esc(p.code||p.productCode||'—')}</div><div class="small">Barcode: ${esc(p.barcode)} · Harga ${rp(p.price)}</div><div class="ingredient-list" style="margin-top:12px">${ing.length?ing.map(i=>`<div class="ingredient"><span>${esc(i.name)}</span><b>${esc(i.qty)}</b></div>`).join(""):'<div class="empty" style="padding:18px">Ingredient belum diisi di Storage.</div>'}</div></div>`;toast("Ingredient ditemukan")}
-$("search").onclick=()=>{find($("scan").value);$("scan").value=""};$("scan").addEventListener("keydown",e=>{if(e.key==="Enter"){$("search").click()}});
-function render(){ $("cards").innerHTML=products.filter(p=>(p.ingredients||[]).length).map(p=>`<button class="product" style="text-align:left;cursor:pointer" onclick="find('${p.barcode}')"><h4>${esc(p.name)}</h4><div class="small">Kode Produk: ${esc(p.code||p.productCode||'—')}</div><div class="small">${p.ingredients.length} ingredient · Barcode: ${esc(p.barcode)}</div></button>`).join("")||'<div class="empty">Belum ada produk dengan ingredient.</div>'}
-window.findIngredient=find;window.addEventListener("storage",()=>{products=load(STORE.products,[]);render()});render();
+
+function showProductResult(p){
+  if(!p){$("result").innerHTML='<div class="empty">Produk tidak ditemukan.</div>';return;}
+  let ing=p.ingredients||[];
+  $("result").innerHTML=`<div class="ingredient-card">
+    <h4>🧾 ${esc(p.name)}</h4>
+    <div class="small" style="margin-top:4px">Kode Produk: <b>${esc(p.code||p.productCode||'—')}</b></div>
+    <div class="small">Barcode: <b>${esc(p.barcode||'—')}</b></div>
+    <div class="small">Kategori: ${esc(p.category||'—')} &nbsp;|&nbsp; Satuan: ${esc(p.unit||'—')}</div>
+    <div class="small" style="margin-top:4px">💰 Harga Jual: <b style="color:#328f46">${rp(p.price)}</b> &nbsp;|&nbsp; HPP/Modal: <b style="color:#c06000">${rp(p.cost||p.hpp||0)}</b></div>
+    <div class="small">📦 Stok: <b>${esc(p.stock??'—')}</b> &nbsp;|&nbsp; Stok Min: ${esc(p.minStock??'—')}</div>
+    ${p.description?`<div class="small" style="margin-top:4px">📝 ${esc(p.description)}</div>`:''}
+    <div style="margin-top:12px"><b style="font-size:12px">🧪 Ingredient / Bahan Baku:</b>
+      <div class="ingredient-list" style="margin-top:7px">${ing.length?ing.map(i=>`<div class="ingredient"><span>${esc(i.name)}</span><b>${esc(i.qty)}</b></div>`).join(''):'<div class="empty" style="padding:14px">Ingredient belum diisi di Storage.</div>'}</div>
+    </div>
+  </div>`;
+  toast('✅ Produk ditemukan: '+p.name);
+}
+
+function find(code){
+  const query=String(code).trim().toLowerCase();
+  if(!query){$("result").innerHTML='<div class="empty">Masukkan kode atau nama produk.</div>';return;}
+  let p=products.find(x=>[x.code,x.productCode,x.barcode].some(v=>String(v||'').trim().toLowerCase()===query));
+  if(!p) p=products.find(x=>String(x.name||'').trim().toLowerCase().includes(query));
+  showProductResult(p);
+}
+
+function findByName(name){
+  const query=String(name).trim().toLowerCase();
+  if(!query){$("result").innerHTML='<div class="empty">Masukkan nama produk.</div>';return;}
+  // exact first, then partial
+  let p=products.find(x=>String(x.name||'').trim().toLowerCase()===query);
+  if(!p) p=products.find(x=>String(x.name||'').trim().toLowerCase().includes(query));
+  showProductResult(p);
+}
+
+$("search").onclick=()=>{find($("scan").value);$("scan").value=''};
+$("scan").addEventListener("keydown",e=>{if(e.key==="Enter"){$("search").click()}});
+$("searchName").onclick=()=>{findByName($("scanName").value);$("scanName").value=''};
+$("scanName").addEventListener("keydown",e=>{if(e.key==="Enter"){$("searchName").click()}});
+
+function render(){
+  $("cards").innerHTML=products.filter(p=>(p.ingredients||[]).length).map(p=>{
+    const code=p.barcode||p.code||p.productCode||'';
+    return `<button class="product" style="text-align:left;cursor:pointer;border:0;width:100%" onclick="find('${esc(code)}')"><h4>${esc(p.name)}</h4><div class="small">Kode: ${esc(p.code||p.productCode||'—')} · Barcode: ${esc(p.barcode||'—')}</div><div class="small">${p.ingredients.length} ingredient · Harga ${rp(p.price)}</div></button>`;
+  }).join('')||'<div class="empty">Belum ada produk dengan ingredient.</div>';
+}
+
+window.findIngredient=find;
+window.addEventListener("storage",()=>{products=load(STORE.products,[]);render()});
+render();
 });
 </script><script src="shared-navbar.js"></script>
 </body></html>
