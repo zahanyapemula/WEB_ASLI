@@ -168,7 +168,19 @@ function render(){
  let all=allCash(),income=0,expense=0,balance=0;all.forEach(e=>{let n=+e.amount||0;if(e.type==="pengeluaran"){expense+=n;balance-=n}else{income+=n;balance+=n}});
  $("saldo").textContent=rp(balance);$("income").textContent=rp(income);$("expense").textContent=rp(expense);$("trx").textContent=new Set(bookkeeping.sales.map(sale=>sale.sale_id).filter(Boolean)).size;
  let q=$("search").value.toLowerCase(),m=$("month").value,run=0,rows=[];
- all.forEach(e=>{run+=e.type==="pengeluaran"?-(+e.amount||0):(+e.amount||0);if((m==="all"||e.date.slice(0,7)===m)&&((e.desc||"").toLowerCase().includes(q)||(e.id||"").toLowerCase().includes(q)))rows.push(`<tr><td>${fmtDate(e.date)}</td><td><b>${esc(e.desc)}</b><div class="small">${e.id}</div></td><td>${e.type==="penjualan"?"Penjualan":e.type==="modal"?"Modal":e.type==="pengeluaran"?"Pengeluaran":"Pemasukan"}</td><td class="money in">${e.type==="pengeluaran"?"—":rp(e.amount)}</td><td class="money out">${e.type==="pengeluaran"?rp(e.amount):"—"}</td><td class="money">${rp(run)}</td></tr>`)});
+ all.forEach(e=>{
+  run+=e.type==="pengeluaran"?-(+e.amount||0):(+e.amount||0);
+  if((m==="all"||e.date.slice(0,7)===m)&&((e.desc||"").toLowerCase().includes(q)||(e.id||"").toLowerCase().includes(q))){
+    let typeLabel=e.type==="penjualan"?"Penjualan":e.type==="modal"?"Modal":e.type==="pengeluaran"?"Pengeluaran":"Pemasukan";
+    let payBadge="";
+    if(e.paymentMethod==="qris"||(e.desc&&e.desc.includes("[QRIS]"))){
+      payBadge=` <span class="tag" style="background:#e0f2fe;color:#0369a1;font-size:10px;padding:2px 6px">QRIS</span>`;
+    }else if(e.paymentMethod==="cash"||(e.desc&&e.desc.includes("[Tunai]"))){
+      payBadge=` <span class="tag" style="background:#f0fdf4;color:#15803d;font-size:10px;padding:2px 6px">Tunai</span>`;
+    }
+    rows.push(`<tr><td>${fmtDate(e.date)}</td><td><b>${esc(e.desc)}</b><div class="small">${e.id}</div></td><td>${typeLabel}${payBadge}</td><td class="money in">${e.type==="pengeluaran"?"—":rp(e.amount)}</td><td class="money out">${e.type==="pengeluaran"?rp(e.amount):"—"}</td><td class="money">${rp(run)}</td></tr>`);
+  }
+ });
  $("ledger").innerHTML=rows.join("");$("empty").style.display=rows.length?"none":"block";
  let months=[...new Set(all.map(e=>e.date.slice(0,7)))].sort().reverse();let opt=[...$("month").options].map(x=>x.value);months.forEach(m=>{if(!opt.includes(m)){let o=document.createElement("option");o.value=m;o.textContent=m;$("month").appendChild(o)}});
  let g={};all.forEach(e=>{let m=e.date.slice(0,7);if(!g[m])g[m]={i:0,o:0};if(e.type==="pengeluaran")g[m].o+=+e.amount;else g[m].i+=+e.amount});

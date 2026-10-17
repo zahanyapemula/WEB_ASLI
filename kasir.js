@@ -203,6 +203,28 @@
 
     let products = load(STORE.products, []);
     let cart = [];
+    let paymentMethod = 'cash';
+
+    function setPaymentMethod(method) {
+      paymentMethod = method === 'qris' ? 'qris' : 'cash';
+      const cashBtn = $('payMethodCash');
+      const qrisBtn = $('payMethodQris');
+      const cashWrap = $('cashInputWrap');
+      const qrisNotice = $('qrisNotice');
+
+      if (cashBtn) cashBtn.classList.toggle('active', paymentMethod === 'cash');
+      if (qrisBtn) qrisBtn.classList.toggle('active', paymentMethod === 'qris');
+
+      if (paymentMethod === 'qris') {
+        if (cashWrap) cashWrap.style.display = 'none';
+        if (qrisNotice) qrisNotice.style.display = 'block';
+        if ($('cash')) $('cash').value = total();
+      } else {
+        if (cashWrap) cashWrap.style.display = 'block';
+        if (qrisNotice) qrisNotice.style.display = 'none';
+      }
+      change();
+    }
 
     function findProduct(code) {
       const normalized = normalizeCode(code);
@@ -262,6 +284,11 @@
     }
 
     function change() {
+      if (paymentMethod === 'qris') {
+        $('changeVal').textContent = 'Rp 0 (Pas)';
+        $('change').style.background = 'var(--soft)';
+        return;
+      }
       const cash = Number($('cash')?.value || 0);
       const difference = cash - total();
       $('changeVal').textContent = rp(Math.max(0, difference));
@@ -274,6 +301,9 @@
       $('total').textContent = rp(total());
       $('checkout').disabled = cart.length === 0;
       $('empty').style.display = cart.length ? 'none' : 'block';
+      if (paymentMethod === 'qris' && $('cash')) {
+        $('cash').value = total();
+      }
       change();
     }
 
@@ -464,9 +494,19 @@
 
     $('quickSearch').addEventListener('input', quick);
     $('cash').addEventListener('input', change);
+    $('payMethodCash')?.addEventListener('click', () => setPaymentMethod('cash'));
+    $('payMethodQris')?.addEventListener('click', () => setPaymentMethod('qris'));
+    $('btnExactCash')?.addEventListener('click', () => {
+      if ($('cash')) {
+        $('cash').value = total();
+        change();
+      }
+    });
+
     $('clear').addEventListener('click', () => {
       cart = [];
       $('cash').value = '';
+      setPaymentMethod('cash');
       const qtyInput = $('scanQty');
       if (qtyInput) qtyInput.value = '1';
       render();
@@ -474,10 +514,15 @@
     });
 
     $('checkout').addEventListener('click', async () => {
-      const cashReceived = Number($('cash').value || 0);
       const transactionTotal = total();
       if (!cart.length) return toast('Keranjang masih kosong.');
-      if (cashReceived < transactionTotal) return toast('Uang diterima kurang.');
+
+      let cashReceived = Number($('cash').value || 0);
+      if (paymentMethod === 'qris') {
+        cashReceived = transactionTotal;
+      } else {
+        if (cashReceived < transactionTotal) return toast('Uang diterima kurang.');
+      }
 
       const checkoutBtn = $('checkout');
       checkoutBtn.disabled = true;
@@ -501,13 +546,17 @@
           total: Number(item.price || 0) * item.qty
         }));
 
+        const methodLabel = paymentMethod === 'qris' ? 'QRIS' : 'Tunai';
+
         const sale = {
           id: saleId,
           date: now.toISOString(),
           items: soldItems,
           total: transactionTotal,
           cash: cashReceived,
-          change: cashReceived - transactionTotal
+          change: cashReceived - transactionTotal,
+          paymentMethod: paymentMethod,
+          paymentMethodLabel: methodLabel
         };
 
         const cashEntry = {
@@ -515,8 +564,9 @@
           date: sale.date,
           type: 'penjualan',
           amount: transactionTotal,
-          desc: 'Penjualan ' + cart.map(item => `${item.name} x${item.qty}`).join(', '),
-          saleId: saleId
+          desc: `Penjualan [${methodLabel}] ` + cart.map(item => `${item.name} x${item.qty}`).join(', '),
+          saleId: saleId,
+          paymentMethod: paymentMethod
         };
 
         // Rekam transaksi secara atomik di Supabase (aman untuk multi-perangkat kasir bersamaan)
@@ -539,6 +589,7 @@
             <div>${now.toLocaleString('id-ID')}</div>
             <div style="font-size:11px;color:#666">No: ${saleId}</div><hr>${rows}<hr>
             <div style="display:flex;justify-content:space-between"><b>TOTAL</b><b>${rp(transactionTotal)}</b></div>
+            <div style="display:flex;justify-content:space-between">Metode Bayar <b>${methodLabel}</b></div>
             <div style="display:flex;justify-content:space-between">Bayar <span>${rp(cashReceived)}</span></div>
             <div style="display:flex;justify-content:space-between">Kembali <span>${rp(cashReceived - transactionTotal)}</span></div>
             <hr><p style="text-align:center">Terima kasih 🙏</p>
@@ -549,6 +600,7 @@
 
         cart = [];
         $('cash').value = '';
+        setPaymentMethod('cash');
         const qtyInput = $('scanQty');
         if (qtyInput) qtyInput.value = '1';
         render();
