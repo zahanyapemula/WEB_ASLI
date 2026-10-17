@@ -110,7 +110,19 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
     }
     .camera-switch{width:100%;min-height:44px;margin-top:10px}
     .camera-switch:disabled{cursor:not-allowed;opacity:.55}
-    
+
+    .qty-ctrl{display:inline-flex;align-items:center;gap:3px;background:var(--soft2);padding:3px;border:1px solid var(--line);border-radius:10px}
+    .qty-btn{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--dark);font-size:15px;font-weight:800;cursor:pointer;transition:.15s;line-height:1}
+    .qty-btn:hover{background:var(--soft);border-color:var(--green);color:#2b7535}
+    .qty-btn:active{transform:scale(.92)}
+    .qty-input{width:48px;height:28px;padding:0 2px;text-align:center;font-family:var(--mono);font-weight:800;font-size:13px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--dark);-moz-appearance:textfield}
+    .qty-input::-webkit-outer-spin-button,.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .qty-input:hover{background:#fff;border-color:var(--line)}
+    .qty-input:focus{background:#fff;border-color:var(--green);box-shadow:0 0 0 2px #eaf8e7;outline:none}
+    .scan-qty-wrap{display:flex;align-items:center;gap:4px;background:#fcfffc;border:1.5px solid var(--line);border-radius:11px;padding:0 10px;transition:.15s}
+    .scan-qty-wrap:focus-within{border-color:var(--green);box-shadow:0 0 0 3px #eaf8e7}
+    .scan-qty-wrap input{width:44px;padding:10px 2px;border:none!important;background:transparent!important;box-shadow:none!important;text-align:center;font-weight:800;font-family:var(--mono)}
+
 
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
@@ -163,13 +175,17 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 
             <div class="card"><div class="title"><h3>Masukkan Kode Identifikasi</h3><span class="tag">Transaksi</span></div>
                 <form id="scanForm" style="display:flex;gap:8px" autocomplete="off">
-                    <input id="scan" name="barcode" placeholder="Scan / ketik barcode lalu Enter" autofocus inputmode="numeric" autocomplete="off" aria-label="Kode barcode">
+                    <input id="scan" name="barcode" placeholder="Scan / ketik barcode lalu Enter" autofocus inputmode="numeric" autocomplete="off" aria-label="Kode barcode" style="flex:1">
+                    <div class="scan-qty-wrap" title="Jumlah barang yang ditambahkan">
+                        <span class="small" style="font-weight:800;color:var(--muted)">Qty</span>
+                        <input id="scanQty" name="qty" type="number" min="1" value="1" aria-label="Jumlah barang" title="Jumlah barang">
+                    </div>
                     <button id="scanAdd" type="submit" class="btn primary" style="min-width:96px">Tambah</button>
                 </form>
 
                 <button id="openCamera" type="button" class="btn secondary" style="width:100%;margin-top:8px">Buka Kamera untuk Scan Barcode</button>
                 <div id="scanHint" class="small" style="margin-top:8px">
-                    Tekan Enter atau klik Tambah untuk memasukkan produk ke keranjang.
+                    Tekan Enter atau klik Tambah. Jumlah barang (Qty) dapat diketik langsung di kolom scan atau pada tabel keranjang.
                 </div>
                 <label class="label" for="quickSearch" style="margin-top:14px">Cari produk</label>
                 <input id="quickSearch" type="search" placeholder="Nama, kode, atau barcode produk" autocomplete="off">

@@ -210,8 +210,16 @@
       return products.find(product => normalizeCode(product.barcode) === normalized) || null;
     }
 
-    function add(code) {
+    function getScanQty() {
+      const el = $('scanQty');
+      if (!el) return 1;
+      const val = parseInt(el.value, 10);
+      return (!isNaN(val) && val >= 1) ? val : 1;
+    }
+
+    function add(code, quantity = 1) {
       const normalized = normalizeCode(code);
+      const qtyToAdd = Math.max(1, parseInt(quantity, 10) || 1);
       if (!normalized) {
         toast('Masukkan atau scan kode barcode terlebih dahulu.');
         return false;
@@ -231,13 +239,17 @@
 
       const existing = cart.find(item => item.id === product.id);
       if (existing) {
-        if (existing.qty >= stock) {
-          toast('Jumlah melebihi stok tersedia.');
+        if (existing.qty + qtyToAdd > stock) {
+          toast(`Jumlah melebihi stok tersedia (sisa stok: ${Math.max(0, stock - existing.qty)}).`);
           return false;
         }
-        existing.qty += 1;
+        existing.qty += qtyToAdd;
       } else {
-        cart.push({ ...product, qty: 1 });
+        if (qtyToAdd > stock) {
+          toast(`Jumlah melebihi stok tersedia (stok: ${stock}).`);
+          return false;
+        }
+        cart.push({ ...product, qty: qtyToAdd });
       }
 
       render();
@@ -256,49 +268,114 @@
       $('change').style.background = cash && difference < 0 ? 'var(--redsoft)' : 'var(--soft)';
     }
 
-    function render() {
-      const body = $('cart');
-      if (!body) return;
-      body.innerHTML = '';
-      $('empty').style.display = cart.length ? 'none' : 'block';
-
-      cart.forEach((item, index) => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td><b>${esc(item.name)}</b><div class="small">Kode Produk: ${esc(item.code || item.productCode || '—')}</div><div class="small">Barcode: ${esc(item.barcode)}</div></td>
-          <td>
-            <div style="display:flex;gap:5px;align-items:center">
-              <button type="button" class="btn secondary qd">−</button>
-              <b>${item.qty}</b>
-              <button type="button" class="btn secondary qi">+</button>
-            </div>
-          </td>
-          <td class="money">${rp(item.price)}</td>
-          <td class="money in">${rp(Number(item.price || 0) * item.qty)}</td>
-          <td><button type="button" class="btn danger rm">✕</button></td>`;
-
-        row.querySelector('.qi').onclick = () => {
-          if (item.qty < Number(item.stock || 0)) item.qty += 1;
-          else toast('Stok tidak cukup.');
-          render();
-        };
-        row.querySelector('.qd').onclick = () => {
-          item.qty -= 1;
-          if (item.qty <= 0) cart.splice(index, 1);
-          render();
-        };
-        row.querySelector('.rm').onclick = () => {
-          cart.splice(index, 1);
-          render();
-        };
-        body.appendChild(row);
-      });
-
+    function updateTotalSummary() {
       const count = cart.reduce((sum, item) => sum + item.qty, 0);
       $('items').textContent = `${count} item`;
       $('total').textContent = rp(total());
       $('checkout').disabled = cart.length === 0;
+      $('empty').style.display = cart.length ? 'none' : 'block';
       change();
+    }
+
+    function render() {
+      const body = $('cart');
+      if (!body) return;
+      body.innerHTML = '';
+
+      cart.forEach((item) => {
+        const maxStock = Number(item.stock || 0);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>
+            <b>${esc(item.name)}</b>
+            <div class="small">Kode Produk: ${esc(item.code || item.productCode || '—')}</div>
+            <div class="small">Barcode: ${esc(item.barcode)}</div>
+          </td>
+          <td>
+            <div class="qty-ctrl">
+              <button type="button" class="qty-btn qd" title="Kurangi 1" aria-label="Kurangi jumlah">−</button>
+              <input type="number" class="qty-input" min="1" max="${maxStock}" value="${item.qty}" aria-label="Jumlah barang" title="Ketik untuk mengubah jumlah barang">
+              <button type="button" class="qty-btn qi" title="Tambah 1" aria-label="Tambah jumlah">+</button>
+            </div>
+            <div class="small" style="margin-top:3px;text-align:center;color:var(--muted)">Maks: ${maxStock}</div>
+          </td>
+          <td class="money">${rp(item.price)}</td>
+          <td class="money in row-subtotal">${rp(Number(item.price || 0) * item.qty)}</td>
+          <td><button type="button" class="btn danger rm" title="Hapus dari keranjang">✕</button></td>`;
+
+        const qtyInput = row.querySelector('.qty-input');
+        const subtotalCell = row.querySelector('.row-subtotal');
+
+        const commitQty = (rawVal) => {
+          let val = parseInt(rawVal, 10);
+          if (isNaN(val) || val < 1) val = 1;
+          if (val > maxStock) {
+            toast(`Stok tidak cukup. Maksimal ${maxStock}.`);
+            val = maxStock;
+          }
+          item.qty = val;
+          qtyInput.value = val;
+          subtotalCell.textContent = rp(Number(item.price || 0) * item.qty);
+          updateTotalSummary();
+        };
+
+        row.querySelector('.qi').onclick = () => {
+          if (item.qty < maxStock) {
+            commitQty(item.qty + 1);
+          } else {
+            toast('Stok tidak cukup.');
+          }
+        };
+
+        row.querySelector('.qd').onclick = () => {
+          if (item.qty > 1) {
+            commitQty(item.qty - 1);
+          } else {
+            const idx = cart.indexOf(item);
+            if (idx > -1) cart.splice(idx, 1);
+            render();
+          }
+        };
+
+        qtyInput.addEventListener('input', () => {
+          if (qtyInput.value === '') return;
+          let val = parseInt(qtyInput.value, 10);
+          if (!isNaN(val)) {
+            if (val > maxStock) {
+              toast(`Stok tidak cukup. Maksimal ${maxStock}.`);
+              val = maxStock;
+              qtyInput.value = val;
+            }
+            if (val >= 1) {
+              item.qty = val;
+              subtotalCell.textContent = rp(Number(item.price || 0) * item.qty);
+              updateTotalSummary();
+            }
+          }
+        });
+
+        qtyInput.addEventListener('blur', () => {
+          commitQty(qtyInput.value);
+        });
+
+        qtyInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.code === 'NumpadEnter') {
+            e.preventDefault();
+            commitQty(qtyInput.value);
+            qtyInput.blur();
+          }
+        });
+
+        row.querySelector('.rm').onclick = () => {
+          const idx = cart.indexOf(item);
+          if (idx > -1) cart.splice(idx, 1);
+          render();
+        };
+
+        body.appendChild(row);
+      });
+
+      updateTotalSummary();
     }
 
     function quick() {
@@ -323,7 +400,13 @@
         box.appendChild(empty);
       }
       box.querySelectorAll('[data-code]').forEach(button => {
-        button.onclick = () => add(button.dataset.code);
+        button.onclick = () => {
+          const qty = getScanQty();
+          if (add(button.dataset.code, qty)) {
+            const qtyInput = $('scanQty');
+            if (qtyInput) qtyInput.value = '1';
+          }
+        };
       });
     }
 
@@ -344,8 +427,13 @@
     $('scanForm').addEventListener('submit', event => {
       event.preventDefault();
       const input = $('scan');
+      const qtyInput = $('scanQty');
       const code = input.value;
-      if (add(code)) input.value = '';
+      const qty = getScanQty();
+      if (add(code, qty)) {
+        input.value = '';
+        if (qtyInput) qtyInput.value = '1';
+      }
       input.focus();
     });
 
@@ -357,6 +445,16 @@
       }
     });
 
+    $('scanQty')?.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.code === 'NumpadEnter') {
+        event.preventDefault();
+        if (!$('scan').value.trim()) {
+          $('scan').focus();
+        } else {
+          $('scanForm').requestSubmit();
+        }
+      }
+    });
 
     window.addEventListener('kasir:barcode-detected', event => {
       $('scan').value = event.detail.code;
@@ -369,6 +467,8 @@
     $('clear').addEventListener('click', () => {
       cart = [];
       $('cash').value = '';
+      const qtyInput = $('scanQty');
+      if (qtyInput) qtyInput.value = '1';
       render();
       $('scan').focus();
     });
@@ -464,6 +564,8 @@
 
       cart = [];
       $('cash').value = '';
+      const qtyInput = $('scanQty');
+      if (qtyInput) qtyInput.value = '1';
       render();
       quick();
       toast('Transaksi tercatat otomatis ✅');
