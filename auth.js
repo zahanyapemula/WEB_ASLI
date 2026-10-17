@@ -387,6 +387,23 @@
     return currentProfile;
   }
 
+  async function updateOwnerProductStorage(productId, stock, ingredients, note) {
+    await ready;
+    if (!client || !currentUser || currentProfile?.role !== 'umkm') {
+      throw new Error('Fitur kelola stok hanya tersedia untuk akun UMKM.');
+    }
+    const cleanStock = Math.max(0, Number(stock) || 0);
+    const { data, error } = await client.rpc('update_owner_product_storage', {
+      p_product_id: String(productId),
+      p_stock: cleanStock,
+      p_ingredients: Array.isArray(ingredients) ? ingredients : null,
+      p_note: note ? String(note).trim() : null
+    });
+    if (error) throw error;
+    if (!data?.product) throw new Error('Produk titipan tidak ditemukan atau bukan milik akun ini.');
+    return data.product;
+  }
+
   async function updateOwnerProductIngredients(productId, ingredients) {
     await ready;
     if (!client || !currentUser || currentProfile?.role !== 'umkm') {
@@ -865,7 +882,7 @@
     DATA_NAMES, accounts, current, read, write, key, setSession,
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
-    listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductIngredients, refreshInventoryProducts, saveProductsAndWait, ready,
+    listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients, refreshInventoryProducts, saveProductsAndWait, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },

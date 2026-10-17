@@ -681,50 +681,97 @@ $$;
 revoke all on function public.update_owner_product_ingredients(text, jsonb) from public, anon;
 grant execute on function public.update_owner_product_ingredients(text, jsonb) to authenticated;
 
--- Reset consignment stock once daily; the stored timezone is UTC, so 17:00 UTC = 01:00 WITA.
-create or replace function public.reset_consignment_stock_daily()
-returns integer
+-- UMKM accounts may update stock and/or ingredient array of their own products.
+-- Sisa stok tidak lagi direset otomatis pada 01.00 WITA; pemilik (owner) dapat mengubah stok secara manual
+-- atau mereset stok ke 0 bila ada pengembalian dana (refund) untuk sisa produk.
+create or replace function public.update_owner_product_storage(
+  p_product_id text,
+  p_stock numeric,
+  p_ingredients jsonb default null,
+  p_note text default null
+)
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  reset_movements integer;
+  caller_role text;
+  caller_owner_code text;
+  caller_owner_name text;
+  updated_product jsonb;
+  target_user_id uuid;
+  current_product jsonb;
+  previous_stock numeric;
+  stock_delta numeric;
+  movement_note text;
 begin
-  insert into public.stock_movements (
-    product_id, product_code, product_name, owner_code, owner_name,
-    movement_type, quantity, occurred_at, note, actor_user_id
-  )
-  select
-    product.value ->> 'id',
-    coalesce(product.value ->> 'code', product.value ->> 'productCode', ''),
-    coalesce(product.value ->> 'name', ''),
-    coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code'),
-    coalesce(product.value ->> 'owner', product.value ->> 'owner_name', ''),
-    'stock_out',
-    (product.value ->> 'stock')::numeric,
-    now(),
-    'Reset stok harian otomatis pukul 01.00 WITA',
-    d.user_id
+  select p.role, p.owner_code, coalesce(p.owner_name, '')
+    into caller_role, caller_owner_code, caller_owner_name
+  from public.user_profiles p
+  where p.user_id = (select auth.uid());
+
+  if caller_role is distinct from 'umkm' or caller_owner_code is null then
+    raise exception 'Fungsi ini hanya tersedia untuk akun UMKM.';
+  end if;
+
+  if p_product_id is null or p_product_id = '' then
+    raise exception 'ID produk tidak valid.';
+  end if;
+
+  if p_stock is null or p_stock < 0 then
+    raise exception 'Jumlah stok tidak valid (harus >= 0).';
+  end if;
+
+  if p_ingredients is not null and (
+    jsonb_typeof(p_ingredients) is distinct from 'array'
+    or jsonb_array_length(p_ingredients) > 100
+    or exists (
+      select 1
+      from jsonb_array_elements(p_ingredients) as ingredient(value)
+      where jsonb_typeof(ingredient.value) <> 'object'
+        or nullif(trim(ingredient.value ->> 'name'), '') is null
+    )
+  ) then
+    raise exception 'Data ingredient tidak valid.';
+  end if;
+
+  select d.user_id, product.value
+    into target_user_id, current_product
   from public.user_data d
   cross join lateral jsonb_array_elements(
     case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
   ) as product(value)
   where d.key = 'products'
-    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
-    and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
-    and (product.value ->> 'stock')::numeric > 0;
+    and product.value ->> 'id' = p_product_id
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code
+  limit 1;
 
-  get diagnostics reset_movements = row_count;
+  if target_user_id is null or current_product is null then
+    raise exception 'Produk titipan tidak ditemukan atau bukan milik akun ini.';
+  end if;
+
+  previous_stock := greatest(0, coalesce((current_product ->> 'stock')::numeric, 0));
+  stock_delta := p_stock - previous_stock;
 
   update public.user_data d
   set value = (
     select jsonb_agg(
       case
-        when coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
-          and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
-          and (product.value ->> 'stock')::numeric > 0
-        then jsonb_set(product.value, '{stock}', '0'::jsonb, true)
+        when product.value ->> 'id' = p_product_id
+          and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code
+        then
+          case
+            when p_ingredients is not null then
+              jsonb_set(
+                jsonb_set(product.value, '{stock}', to_jsonb(p_stock), true),
+                '{ingredients}',
+                p_ingredients,
+                true
+              )
+            else
+              jsonb_set(product.value, '{stock}', to_jsonb(p_stock), true)
+          end
         else product.value
       end
       order by product.ordinality
@@ -732,33 +779,71 @@ begin
     from jsonb_array_elements(d.value) with ordinality as product(value, ordinality)
   ),
   updated_at = now()
-  where d.key = 'products'
-    and jsonb_typeof(d.value) = 'array'
-    and exists (
-      select 1
-      from jsonb_array_elements(d.value) as product(value)
-      where coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') ~ '^[0-9]{4}$'
-        and coalesce(product.value ->> 'stock', '') ~ '^[0-9]+([.][0-9]+)?$'
-        and (product.value ->> 'stock')::numeric > 0
-    );
+  where d.user_id = target_user_id
+    and d.key = 'products';
 
-  return reset_movements;
+  if stock_delta <> 0 then
+    if p_stock = 0 then
+      movement_note := coalesce(nullif(trim(p_note), ''), 'Pengembalian dana (refund) sisa produk oleh pemilik (owner)');
+    elsif stock_delta > 0 then
+      movement_note := coalesce(nullif(trim(p_note), ''), 'Penambahan stok oleh pemilik (owner)');
+    else
+      movement_note := coalesce(nullif(trim(p_note), ''), 'Pengurangan stok oleh pemilik (owner)');
+    end if;
+
+    insert into public.stock_movements (
+      product_id,
+      product_code,
+      product_name,
+      owner_code,
+      owner_name,
+      movement_type,
+      quantity,
+      occurred_at,
+      note,
+      actor_user_id
+    ) values (
+      p_product_id,
+      coalesce(current_product ->> 'code', current_product ->> 'productCode', ''),
+      coalesce(current_product ->> 'name', ''),
+      caller_owner_code,
+      coalesce(nullif(trim(caller_owner_name), ''), current_product ->> 'owner', current_product ->> 'owner_name', ''),
+      case when stock_delta > 0 then 'stock_in' else 'stock_out' end,
+      abs(stock_delta),
+      now(),
+      movement_note,
+      (select auth.uid())
+    );
+  end if;
+
+  select product.value
+    into updated_product
+  from public.user_data d
+  cross join lateral jsonb_array_elements(d.value) as product(value)
+  where d.user_id = target_user_id
+    and d.key = 'products'
+    and product.value ->> 'id' = p_product_id
+    and coalesce(product.value ->> 'ownerCode', product.value ->> 'owner_code') = caller_owner_code
+  limit 1;
+
+  return jsonb_build_object('product', updated_product);
 end;
 $$;
 
-revoke all on function public.reset_consignment_stock_daily() from public, anon, authenticated;
+revoke all on function public.update_owner_product_storage(text, numeric, jsonb, text) from public, anon;
+grant execute on function public.update_owner_product_storage(text, numeric, jsonb, text) to authenticated;
 
+-- Pembatalan cron job otomatis pukul 01.00 WITA:
+-- Jadwal reset harian otomatis ditiadakan karena sisa barang tidak selalu dikembalikan.
+-- Stok dikelola dan dapat direset ke 0 secara manual oleh pemilik saat ada refund sisa produk.
 create extension if not exists pg_cron;
 do $$
 begin
-  perform cron.unschedule(jobid)
-  from cron.job
-  where jobname = 'reset-consignment-stock-wita';
-
-  perform cron.schedule(
-    'reset-consignment-stock-wita',
-    '0 17 * * *',
-    'select public.reset_consignment_stock_daily();'
-  );
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule(jobid)
+    from cron.job
+    where jobname = 'reset-consignment-stock-wita';
+  end if;
 end;
 $$;
+
