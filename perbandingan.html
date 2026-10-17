@@ -159,7 +159,7 @@ function render(){
  let days=[],start=new Date(A),end=new Date(B);if(start>end)[start,end]=[end,start];for(let x=new Date(start);x<=end;x.setDate(x.getDate()+1))days.push(x.toISOString().slice(0,10));
  if(chart)chart.destroy();chart=new Chart($("chart"),{type:"bar",data:{labels:days.map(x=>x.slice(5)),datasets:[{label:label(m),data:days.map(x=>value(x,m))}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>(m==="transactions"||m==="units")?v:"Rp "+Number(v).toLocaleString("id-ID")}}}}});
 }
-$("compare").onclick=render;$("metric").onchange=render;$("comparisonOwner").onchange=render;window.addEventListener("storage",()=>{void loadSales()});void loadSales();
+$("compare").onclick=render;$("metric").onchange=render;$("comparisonOwner").onchange=render;window.addEventListener("storage",()=>{void loadSales()});window.addEventListener("webpkm:data-change",()=>{void loadSales()});void loadSales();
 });
 </script><script src="shared-navbar.js"></script>
 </body></html>

@@ -473,17 +473,21 @@
       $('scan').focus();
     });
 
-    $('checkout').addEventListener('click', () => {
+    $('checkout').addEventListener('click', async () => {
       const cashReceived = Number($('cash').value || 0);
       const transactionTotal = total();
       if (!cart.length) return toast('Keranjang masih kosong.');
       if (cashReceived < transactionTotal) return toast('Uang diterima kurang.');
 
-      const now = new Date();
-      const sale = {
-        id: 'TRX-' + Date.now(),
-        date: now.toISOString(),
-        items: cart.map(item => ({
+      const checkoutBtn = $('checkout');
+      checkoutBtn.disabled = true;
+      checkoutBtn.textContent = '⏳ Menyimpan Transaksi...';
+
+      try {
+        const now = new Date();
+        const uniqueSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
+        const saleId = 'TRX-' + Date.now() + '-' + uniqueSuffix;
+        const soldItems = cart.map(item => ({
           id: item.id,
           name: item.name,
           code: item.code || item.productCode || '',
@@ -495,81 +499,69 @@
           price: Number(item.price || 0),
           cost: Number(item.cost || 0),
           total: Number(item.price || 0) * item.qty
-        })),
-        total: transactionTotal,
-        cash: cashReceived,
-        change: cashReceived - transactionTotal
-      };
-
-      const sales = load(STORE.sales, []);
-      sales.push(sale);
-      save(STORE.sales, sales);
-
-      products.forEach(product => {
-        const sold = cart.find(item => item.id === product.id);
-        if (sold) product.stock = Math.max(0, Number(product.stock || 0) - sold.qty);
-      });
-      save(STORE.products, products);
-      const stockSaleMovements = cart
-        .filter(item => /^\d{4}$/.test(String(item.ownerCode || '')))
-        .map(item => ({
-          product_id: item.id,
-          product_code: item.code || item.productCode,
-          product_name: item.name,
-          owner_code: item.ownerCode,
-          owner_name: item.owner,
-          movement_type: 'sale',
-          quantity: item.qty,
-          gross_amount: Number(item.total) || Number(item.price || 0) * item.qty,
-          occurred_at: sale.date,
-          sale_id: sale.id
         }));
-      if (stockSaleMovements.length) {
-        KasirAuth.recordStockMovements(stockSaleMovements).catch(error => {
-          console.error('Riwayat penjualan stok gagal disinkronkan:', error);
-          toast(`Transaksi tersimpan, tetapi rekap stok belum tersinkron: ${error.message}`);
+
+        const sale = {
+          id: saleId,
+          date: now.toISOString(),
+          items: soldItems,
+          total: transactionTotal,
+          cash: cashReceived,
+          change: cashReceived - transactionTotal
+        };
+
+        const cashEntry = {
+          id: saleId,
+          date: sale.date,
+          type: 'penjualan',
+          amount: transactionTotal,
+          desc: 'Penjualan ' + cart.map(item => `${item.name} x${item.qty}`).join(', '),
+          saleId: saleId
+        };
+
+        // Rekam transaksi secara atomik di Supabase (aman untuk multi-perangkat kasir bersamaan)
+        await KasirAuth.recordPosTransaction({
+          sale,
+          cash: cashEntry,
+          items: soldItems
         });
+
+        const rows = cart.map(item =>
+          `<div style="display:flex;justify-content:space-between"><span>${esc(item.name)} x${item.qty}</span><span>${rp(item.price * item.qty)}</span></div>`
+        ).join('');
+
+        const receiptWindow = window.open('', '_blank', 'width=430,height=650');
+        if (receiptWindow) {
+          // Jangan menaruh literal </script> di source HTML utama; struk ditulis setelah JS berjalan.
+          const receiptScript = '<' + '/script>';
+          receiptWindow.document.write(`<!doctype html><html><body style="font-family:monospace;padding:20px">
+            <h2 style="text-align:center">KASIRTOKO</h2>
+            <div>${now.toLocaleString('id-ID')}</div>
+            <div style="font-size:11px;color:#666">No: ${saleId}</div><hr>${rows}<hr>
+            <div style="display:flex;justify-content:space-between"><b>TOTAL</b><b>${rp(transactionTotal)}</b></div>
+            <div style="display:flex;justify-content:space-between">Bayar <span>${rp(cashReceived)}</span></div>
+            <div style="display:flex;justify-content:space-between">Kembali <span>${rp(cashReceived - transactionTotal)}</span></div>
+            <hr><p style="text-align:center">Terima kasih 🙏</p>
+            <script>window.onload=()=>setTimeout(()=>window.print(),200)${receiptScript}
+          </body></html>`);
+          receiptWindow.document.close();
+        }
+
+        cart = [];
+        $('cash').value = '';
+        const qtyInput = $('scanQty');
+        if (qtyInput) qtyInput.value = '1';
+        render();
+        quick();
+        toast('Transaksi tercatat otomatis ✅');
+        $('scan').focus();
+      } catch (error) {
+        console.error('Transaksi gagal disimpan:', error);
+        toast(`Gagal menyimpan transaksi: ${error.message}`);
+      } finally {
+        checkoutBtn.textContent = '🧾 Selesaikan & Cetak Struk';
+        checkoutBtn.disabled = cart.length === 0;
       }
-
-      const cash = load(STORE.cash, []);
-      cash.push({
-        id: sale.id,
-        date: sale.date,
-        type: 'penjualan',
-        amount: transactionTotal,
-        desc: 'Penjualan ' + cart.map(item => `${item.name} x${item.qty}`).join(', '),
-        saleId: sale.id
-      });
-      save(STORE.cash, cash);
-
-      const rows = cart.map(item =>
-        `<div style="display:flex;justify-content:space-between"><span>${esc(item.name)} x${item.qty}</span><span>${rp(item.price * item.qty)}</span></div>`
-      ).join('');
-
-      const receiptWindow = window.open('', '_blank', 'width=430,height=650');
-      if (receiptWindow) {
-        // Jangan menaruh literal </script> di source HTML utama; struk ditulis setelah JS berjalan.
-        const receiptScript = '<' + '/script>';
-        receiptWindow.document.write(`<!doctype html><html><body style="font-family:monospace;padding:20px">
-          <h2 style="text-align:center">KASIRTOKO</h2>
-          <div>${now.toLocaleString('id-ID')}</div><hr>${rows}<hr>
-          <div style="display:flex;justify-content:space-between"><b>TOTAL</b><b>${rp(transactionTotal)}</b></div>
-          <div style="display:flex;justify-content:space-between">Bayar <span>${rp(cashReceived)}</span></div>
-          <div style="display:flex;justify-content:space-between">Kembali <span>${rp(cashReceived - transactionTotal)}</span></div>
-          <hr><p style="text-align:center">Terima kasih 🙏</p>
-          <script>window.onload=()=>setTimeout(()=>window.print(),200)${receiptScript}
-        </body></html>`);
-        receiptWindow.document.close();
-      }
-
-      cart = [];
-      $('cash').value = '';
-      const qtyInput = $('scanQty');
-      if (qtyInput) qtyInput.value = '1';
-      render();
-      quick();
-      toast('Transaksi tercatat otomatis ✅');
-      $('scan').focus();
     });
 
     window.addEventListener('storage', refreshProducts);

@@ -331,6 +331,7 @@ $("search").oninput=render;$("month").onchange=render;
 $("recapDate").onchange=renderConsignmentRecap;$("recapOwnerFilter").onchange=renderConsignmentRecap;
 $("export").onclick=()=>{if(!isManager)return;let csv="Tanggal,ID,Keterangan,Jenis,Nominal\n";bookkeeping.cash.map(row=>row.entry).filter(Boolean).forEach(e=>csv+=`"${e.date}","${e.id}","${String(e.desc).replace(/"/g,'""')}","${e.type}","${e.amount}"\n`);let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="buku-kas.csv";a.click()};
 window.addEventListener("storage",()=>{cash=load(STORE.cash,[]);void loadBookkeeping()});
+window.addEventListener("webpkm:data-change",()=>{cash=load(STORE.cash,[]);void loadBookkeeping()});
 window.addEventListener("focus",()=>void loadBookkeeping());
 void loadBookkeeping();
 });

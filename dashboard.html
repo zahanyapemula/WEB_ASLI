@@ -127,7 +127,7 @@ function render(){
  let maxDay=vals.sort((a,b)=>b[1]-a[1])[0],minDay=vals.slice().sort((a,b)=>a[1]-b[1])[0],maxHour=hours.indexOf(Math.max(...hours));
  $("insight").innerHTML=sales.length?`• Titik penjualan tertinggi pada data yang tampil: <b>${maxDay?.[0]||"—"}</b> (${rp(maxDay?.[1]||0)}).<br>• Titik terendah: <b>${minDay?.[0]||"—"}</b> (${rp(minDay?.[1]||0)}).<br>• Jam dengan omzet tertinggi: sekitar <b>${maxHour}:00</b>.<br>• Gunakan pola ini untuk menentukan waktu restok, promosi, dan persiapan stok.`:"Belum ada transaksi. Setelah transaksi selesai di Kasir, analisis akan terisi otomatis.";
 }
-$("range").onchange=render;window.addEventListener("storage",()=>{sales=load(STORE.sales,[]);render()});render();
+$("range").onchange=render;window.addEventListener("storage",()=>{sales=load(STORE.sales,[]);render()});window.addEventListener("webpkm:data-change",()=>{sales=load(STORE.sales,[]);render()});render();
 });
 </script><script src="shared-navbar.js"></script>
 </body></html>

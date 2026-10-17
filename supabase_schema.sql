@@ -847,3 +847,261 @@ begin
 end;
 $$;
 
+-- ====================================================================
+-- PANCATATAN TRANSAKSI KASIR SIMULTAN (ANTI RACE-CONDITION & REALTIME)
+-- Mencegah transaksi tertimpa saat dua perangkat kasir melakukan checkout bersamaan.
+-- ====================================================================
+
+create or replace function public.record_pos_transaction(
+  p_sale jsonb,
+  p_cash jsonb default null,
+  p_items jsonb default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  caller_role text;
+  caller_store_code text;
+  target_user_id uuid;
+  final_sales jsonb;
+  final_cash jsonb;
+  updated_products jsonb;
+begin
+  if caller_id is null then
+    raise exception 'Silakan login terlebih dahulu.';
+  end if;
+
+  select p.role, coalesce(p.store_code, '')
+    into caller_role, caller_store_code
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  if caller_role not in ('admin', 'cashier') then
+    raise exception 'Hanya Admin atau Kasir yang dapat mencatat transaksi.';
+  end if;
+
+  target_user_id := caller_id;
+  if caller_role = 'cashier' and caller_store_code <> '' then
+    select p2.user_id into target_user_id
+    from public.user_profiles p2
+    where upper(p2.store_code) = upper(caller_store_code)
+      and p2.role = 'admin'
+    order by p2.created_at asc
+    limit 1;
+    if target_user_id is null then
+      target_user_id := caller_id;
+    end if;
+  end if;
+
+  if p_sale is null or jsonb_typeof(p_sale) <> 'object' or nullif(trim(p_sale ->> 'id'), '') is null then
+    raise exception 'Data transaksi penjualan tidak valid.';
+  end if;
+
+  -- 1. APPEND TRANSAKSI PENJUALAN SECARA ATOMIK
+  insert into public.user_data (user_id, key, value, updated_at)
+  values (target_user_id, 'sales', jsonb_build_array(p_sale), now())
+  on conflict (user_id, key) do update
+  set value = (
+    case
+      when jsonb_typeof(user_data.value) = 'array' then
+        case
+          when exists (
+            select 1 from jsonb_array_elements(user_data.value) as s(val)
+            where s.val ->> 'id' = p_sale ->> 'id'
+          ) then user_data.value
+          else user_data.value || jsonb_build_array(p_sale)
+        end
+      else jsonb_build_array(p_sale)
+    end
+  ),
+  updated_at = now()
+  returning value into final_sales;
+
+  -- 2. APPEND BUKU KAS SECARA ATOMIK
+  if p_cash is not null and jsonb_typeof(p_cash) = 'object' then
+    insert into public.user_data (user_id, key, value, updated_at)
+    values (target_user_id, 'cash', jsonb_build_array(p_cash), now())
+    on conflict (user_id, key) do update
+    set value = (
+      case
+        when jsonb_typeof(user_data.value) = 'array' then
+          case
+            when exists (
+              select 1 from jsonb_array_elements(user_data.value) as c(val)
+              where c.val ->> 'id' = p_cash ->> 'id'
+                 or (c.val ->> 'saleId' is not null and c.val ->> 'saleId' = p_cash ->> 'saleId')
+            ) then user_data.value
+            else user_data.value || jsonb_build_array(p_cash)
+          end
+        else jsonb_build_array(p_cash)
+      end
+    ),
+    updated_at = now()
+    returning value into final_cash;
+  end if;
+
+  -- 3. PENGURANGAN STOK PRODUK SECARA ATOMIK
+  if p_items is not null and jsonb_typeof(p_items) = 'array' then
+    update public.user_data d
+    set value = (
+      select jsonb_agg(
+        case
+          when sold_calc.total_sold is not null and sold_calc.total_sold > 0 then
+            jsonb_set(
+              prod.value,
+              '{stock}',
+              to_jsonb(greatest(0, coalesce((prod.value ->> 'stock')::numeric, 0) - sold_calc.total_sold)),
+              true
+            )
+          else prod.value
+        end
+        order by prod.ordinality
+      )
+      from jsonb_array_elements(d.value) with ordinality as prod(value, ordinality)
+      left join lateral (
+        select sum((it.value ->> 'qty')::numeric) as total_sold
+        from jsonb_array_elements(p_items) as it(value)
+        where (it.value ->> 'id' is not null and it.value ->> 'id' = prod.value ->> 'id')
+           or (
+             nullif(trim(prod.value ->> 'barcode'), '') is not null
+             and nullif(trim(it.value ->> 'barcode'), '') is not null
+             and it.value ->> 'barcode' = prod.value ->> 'barcode'
+           )
+      ) sold_calc on true
+    ),
+    updated_at = now()
+    where d.key = 'products'
+      and (
+        d.user_id = target_user_id
+        or (caller_store_code <> '' and d.user_id in (
+          select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+        ))
+      );
+
+    -- 4. CATAT MUTASI PENJUALAN TITIPAN (STOCK MOVEMENTS)
+    insert into public.stock_movements (
+      product_id,
+      product_code,
+      product_name,
+      owner_code,
+      owner_name,
+      movement_type,
+      quantity,
+      gross_amount,
+      occurred_at,
+      sale_id,
+      note,
+      actor_user_id
+    )
+    select
+      coalesce(item.value ->> 'id', ''),
+      coalesce(item.value ->> 'code', item.value ->> 'productCode', ''),
+      coalesce(item.value ->> 'name', ''),
+      item.value ->> 'ownerCode',
+      coalesce(item.value ->> 'owner', item.value ->> 'owner_name', ''),
+      'sale',
+      (item.value ->> 'qty')::numeric,
+      coalesce((item.value ->> 'total')::numeric, ((item.value ->> 'price')::numeric * (item.value ->> 'qty')::numeric)),
+      coalesce((p_sale ->> 'date')::timestamptz, now()),
+      p_sale ->> 'id',
+      'Penjualan kasir ID: ' || coalesce(p_sale ->> 'id', ''),
+      caller_id
+    from jsonb_array_elements(p_items) as item(value)
+    where coalesce(item.value ->> 'ownerCode', '') ~ '^[0-9]{4}$'
+      and (item.value ->> 'qty')::numeric > 0;
+  end if;
+
+  select d.value into updated_products
+  from public.user_data d
+  where d.user_id = target_user_id and d.key = 'products';
+
+  return jsonb_build_object(
+    'success', true,
+    'sale_id', p_sale ->> 'id',
+    'sales', final_sales,
+    'cash', final_cash,
+    'products', updated_products
+  );
+end;
+$$;
+
+revoke all on function public.record_pos_transaction(jsonb, jsonb, jsonb) from public, anon;
+grant execute on function public.record_pos_transaction(jsonb, jsonb, jsonb) to authenticated;
+
+-- Fungsi penggabungan array user_data yang aman dari timpa data
+create or replace function public.sync_user_data_array(
+  p_key text,
+  p_items jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  existing_val jsonb;
+  merged_val jsonb;
+begin
+  if caller_id is null then
+    raise exception 'Silakan login terlebih dahulu.';
+  end if;
+
+  if p_key not in ('sales', 'cash', 'expenses') then
+    raise exception 'Key tidak didukung untuk sinkronisasi array.';
+  end if;
+
+  select value into existing_val
+  from public.user_data
+  where user_id = caller_id and key = p_key
+  for update;
+
+  if existing_val is null or jsonb_typeof(existing_val) <> 'array' then
+    existing_val := '[]'::jsonb;
+  end if;
+
+  select coalesce(
+    jsonb_agg(item.val),
+    '[]'::jsonb
+  )
+  into merged_val
+  from (
+    select distinct on (coalesce(val ->> 'id', val ->> 'saleId', val::text)) val
+    from (
+      select value as val from jsonb_array_elements(existing_val)
+      union all
+      select value as val from jsonb_array_elements(case when jsonb_typeof(p_items) = 'array' then p_items else '[]'::jsonb end)
+    ) combined
+  ) item;
+
+  insert into public.user_data (user_id, key, value, updated_at)
+  values (caller_id, p_key, merged_val, now())
+  on conflict (user_id, key) do update
+  set value = merged_val,
+      updated_at = now();
+
+  return merged_val;
+end;
+$$;
+
+revoke all on function public.sync_user_data_array(text, jsonb) from public, anon;
+grant execute on function public.sync_user_data_array(text, jsonb) to authenticated;
+
+-- Tambahkan user_data ke supabase_realtime agar perubahan data tersiar real-time ke semua perangkat kasir
+alter table public.user_data replica identity full;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'user_data'
+  ) then
+    alter publication supabase_realtime add table public.user_data;
+  end if;
+end;
+$$;
+
+

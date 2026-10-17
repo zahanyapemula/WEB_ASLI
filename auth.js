@@ -55,6 +55,25 @@
 
   async function saveCloud(name, value) {
     if (!client || !session?.access_token || !currentUser || hydrating) return;
+    if (['sales', 'cash'].includes(name) && Array.isArray(value)) {
+      try {
+        const { data, error } = await client.rpc('sync_user_data_array', {
+          p_key: name,
+          p_items: value
+        });
+        if (!error && Array.isArray(data)) {
+          hydrating = true;
+          try {
+            originalSetItem(localKey(name), JSON.stringify(data));
+          } finally {
+            hydrating = false;
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('sync_user_data_array fallback to upsert:', err);
+      }
+    }
     if (name === 'products' && ['admin', 'cashier'].includes(currentProfile?.role)) {
       const grouped = new Map();
       for (const product of Array.isArray(value) ? value : []) {
@@ -165,6 +184,71 @@
         originalSetItem(localKey('products'), JSON.stringify(allProducts));
       }
     } finally { hydrating = false; }
+    setupRealtimeSync();
+  }
+
+  let realtimeChannel = null;
+  function setupRealtimeSync() {
+    if (!client || !currentUser || !session?.access_token) return;
+    if (realtimeChannel) {
+      try { client.removeChannel(realtimeChannel); } catch (_) {}
+      realtimeChannel = null;
+    }
+
+    const channelName = 'public_user_data_' + String(currentUser.id || 'pos').substring(0, 8);
+    realtimeChannel = client
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_data'
+        },
+        payload => {
+          if (!payload.new || !payload.new.key) return;
+          const { key, value } = payload.new;
+          if (!DATA_NAMES.includes(key)) return;
+
+          const lk = localKey(key);
+          const currentLocal = readLocal(lk, []);
+
+          if (['sales', 'cash'].includes(key) && Array.isArray(value)) {
+            const localArr = Array.isArray(currentLocal) ? currentLocal : [];
+            const existingIds = new Set(localArr.map(x => String(x.id || x.saleId || '')));
+            let hasNew = false;
+            for (const item of value) {
+              const id = String(item.id || item.saleId || '');
+              if (id && !existingIds.has(id)) {
+                localArr.push(item);
+                existingIds.add(id);
+                hasNew = true;
+              }
+            }
+            if (hasNew || value.length > localArr.length) {
+              localArr.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+              hydrating = true;
+              try {
+                originalSetItem(lk, JSON.stringify(localArr));
+              } finally {
+                hydrating = false;
+              }
+              window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: key } }));
+            }
+          } else if (key === 'products' && Array.isArray(value)) {
+            hydrating = true;
+            try {
+              originalSetItem(lk, JSON.stringify(value));
+            } finally {
+              hydrating = false;
+            }
+            window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (err) console.warn('Supabase Realtime subscription status:', status, err);
+      });
   }
 
   async function refreshInventoryProducts() {
@@ -417,6 +501,68 @@
     if (error) throw error;
     if (!data?.product) throw new Error('Produk titipan tidak ditemukan atau bukan milik akun ini.');
     return data.product;
+  }
+
+  async function recordPosTransaction({ sale, cash, items }) {
+    await ready;
+    if (client && currentUser) {
+      try {
+        const { data, error } = await client.rpc('record_pos_transaction', {
+          p_sale: sale,
+          p_cash: cash || null,
+          p_items: items || null
+        });
+        if (error) throw error;
+        if (data?.success) {
+          hydrating = true;
+          try {
+            if (Array.isArray(data.sales)) {
+              originalSetItem(localKey('sales'), JSON.stringify(data.sales));
+            }
+            if (Array.isArray(data.cash)) {
+              originalSetItem(localKey('cash'), JSON.stringify(data.cash));
+            }
+            if (Array.isArray(data.products)) {
+              originalSetItem(localKey('products'), JSON.stringify(data.products));
+            }
+          } finally {
+            hydrating = false;
+          }
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'sales' } }));
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+          return data;
+        }
+      } catch (err) {
+        console.warn('RPC record_pos_transaction gagal, fallback ke penyimpanan lokal:', err);
+      }
+    }
+
+    // Fallback jika offline
+    const currentSales = readLocal(localKey('sales'), []);
+    if (!currentSales.some(s => s.id === sale.id)) {
+      currentSales.push(sale);
+      originalSetItem(localKey('sales'), JSON.stringify(currentSales));
+    }
+    if (cash) {
+      const currentCash = readLocal(localKey('cash'), []);
+      if (!currentCash.some(c => c.id === cash.id || (c.saleId && c.saleId === cash.saleId))) {
+        currentCash.push(cash);
+        originalSetItem(localKey('cash'), JSON.stringify(currentCash));
+      }
+    }
+    if (Array.isArray(items)) {
+      const currentProducts = readLocal(localKey('products'), []);
+      items.forEach(sold => {
+        const prod = currentProducts.find(p => p.id === sold.id || (p.barcode && p.barcode === sold.barcode));
+        if (prod) prod.stock = Math.max(0, Number(prod.stock || 0) - sold.qty);
+      });
+      originalSetItem(localKey('products'), JSON.stringify(currentProducts));
+    }
+    window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'sales' } }));
+    window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
+    window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+    return { success: true, fallback: true };
   }
 
   async function markOwnerSettlement({ ownerCode, ownerName, date, unitsSold, grossAmount }) {
@@ -832,6 +978,10 @@
   function write(key, value) { writeLocal(key, value); }
 
   async function logout() {
+    if (realtimeChannel && client) {
+      try { client.removeChannel(realtimeChannel); } catch (_) {}
+      realtimeChannel = null;
+    }
     if (client) {
       const { error } = await client.auth.signOut();
       if (error) throw error;
@@ -882,7 +1032,8 @@
     DATA_NAMES, accounts, current, read, write, key, setSession,
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
-    listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients, refreshInventoryProducts, saveProductsAndWait, ready,
+    listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients,
+    recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },
