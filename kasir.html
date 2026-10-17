@@ -124,12 +124,12 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
     .scan-qty-wrap input{width:44px;padding:10px 2px;border:none!important;background:transparent!important;box-shadow:none!important;text-align:center;font-weight:800;font-family:var(--mono)}
 
     .pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-    .btn-pay-method{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:11px;border:1.5px solid var(--line);background:var(--soft2);color:var(--dark);font-weight:700;font-size:13px;cursor:pointer;transition:all .15s ease}
+    .btn-pay-method{display:flex;align-items:center;justify-content:center;padding:10px 8px;border-radius:11px;border:1.5px solid var(--line);background:var(--soft2);color:var(--dark);font-weight:700;font-size:13px;cursor:pointer;transition:all .15s ease}
     .btn-pay-method:hover{background:var(--soft);border-color:var(--green)}
     .btn-pay-method.active{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 3px 10px rgba(43,117,53,0.25)}
-    .qris-notice{margin-top:12px;padding:12px;border-radius:11px;background:#f0f7ff;border:1px solid #b8d9fc;color:#1e528a;font-size:12.5px;line-height:1.45;display:none}
     .btn-exact-cash{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--green);font-weight:700;transition:.15s}
     .btn-exact-cash:hover{background:var(--soft);border-color:var(--green)}
+    #cash:read-only{background:var(--soft2);color:var(--muted);cursor:not-allowed}
 
 @media(max-width:1000px){.grid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.app{padding:14px 11px}.nav a{padding:8px 7px;font-size:10px}.hero h2{font-size:24px}.grid3,.stats,.form,.compare{grid-template-columns:1fr}.full{grid-column:auto}.scanner-box{grid-template-columns:1fr}}
@@ -227,23 +227,18 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 
             <label class="label" style="margin-top:14px">Metode Pembayaran</label>
             <div class="pay-methods">
-                <button type="button" id="payMethodCash" class="btn-pay-method active" data-method="cash">
-                    💵 Tunai (Cash)
+                <button type="button" id="payMethodCash" class="btn-pay-method active" data-method="cash" onclick="window.setKasirPaymentMethod && window.setKasirPaymentMethod('cash')">
+                    Tunai (Cash)
                 </button>
-                <button type="button" id="payMethodQris" class="btn-pay-method" data-method="qris">
-                    📱 QRIS
+                <button type="button" id="payMethodQris" class="btn-pay-method" data-method="qris" onclick="window.setKasirPaymentMethod && window.setKasirPaymentMethod('qris')">
+                    QRIS
                 </button>
-            </div>
-
-            <div id="qrisNotice" class="qris-notice">
-                <div style="font-weight:700;margin-bottom:3px">Pembayaran Non-Tunai (QRIS)</div>
-                <div>Arahkan pelanggan scan kode QRIS toko. Nominal bayar disesuaikan otomatis (Uang Pas).</div>
             </div>
 
             <div id="cashInputWrap" style="margin-top:14px">
                 <div style="display:flex;align-items:center;justify-content:space-between">
                     <label class="label" style="margin:0">Uang Diterima</label>
-                    <button type="button" id="btnExactCash" class="btn-exact-cash" title="Isi otomatis dengan jumlah total belanja">Uang Pas</button>
+                    <button type="button" id="btnExactCash" class="btn-exact-cash" title="Isi otomatis dengan jumlah total belanja" onclick="window.fillExactCash && window.fillExactCash()">Uang Pas</button>
                 </div>
                 <input id="cash" type="number" min="0" placeholder="0" style="margin-top:6px">
             </div>
@@ -270,7 +265,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div>
 <div id="toast" class="toast"></div>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js" defer></script>
-<script src="kasir.js" defer></script>
+<script src="kasir.js?v=4" defer></script>
 <script src="shared-navbar.js"></script>
 </body>
 </html>
