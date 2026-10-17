@@ -4,16 +4,12 @@
     const isQris = method === 'qris';
     const cashBtn = document.getElementById('payMethodCash');
     const qrisBtn = document.getElementById('payMethodQris');
-    const cashInput = document.getElementById('cash');
-    const btnExactCash = document.getElementById('btnExactCash');
     if (cashBtn) cashBtn.classList.toggle('active', !isQris);
     if (qrisBtn) qrisBtn.classList.toggle('active', isQris);
-    if (cashInput) cashInput.readOnly = isQris;
-    if (btnExactCash) btnExactCash.style.display = isQris ? 'none' : 'inline-block';
   };
   window.fillExactCash = () => {
     const cashInput = document.getElementById('cash');
-    if (cashInput && !cashInput.readOnly) cashInput.value = '0';
+    if (cashInput) cashInput.value = '0';
   };
 
   const setupCameraScanner = () => {
@@ -226,29 +222,20 @@
       const cashBtn = $('payMethodCash');
       const qrisBtn = $('payMethodQris');
       const cashInput = $('cash');
-      const btnExactCash = $('btnExactCash');
 
       if (cashBtn) cashBtn.classList.toggle('active', paymentMethod === 'cash');
       if (qrisBtn) qrisBtn.classList.toggle('active', paymentMethod === 'qris');
 
-      if (paymentMethod === 'qris') {
-        if (cashInput) {
-          cashInput.value = total();
-          cashInput.readOnly = true;
-        }
-        if (btnExactCash) btnExactCash.style.display = 'none';
-      } else {
-        if (cashInput) {
-          cashInput.readOnly = false;
-        }
-        if (btnExactCash) btnExactCash.style.display = 'inline-block';
+      // Saat beralih ke QRIS, otomatis isi uang diterima dengan total belanja (tetap bisa diketik bebas)
+      if (paymentMethod === 'qris' && cashInput) {
+        cashInput.value = total();
       }
       change();
     }
     window.setKasirPaymentMethod = setPaymentMethod;
     window.fillExactCash = () => {
       const cashInput = $('cash');
-      if (cashInput && !cashInput.readOnly) {
+      if (cashInput) {
         cashInput.value = total();
         change();
       }
@@ -312,15 +299,18 @@
     }
 
     function change() {
-      if (paymentMethod === 'qris') {
+      const currentTotal = total();
+      const cashVal = $('cash')?.value?.trim() ?? '';
+      const cash = Number(cashVal || 0);
+      const difference = cash - currentTotal;
+
+      if (cashVal !== '' && difference === 0) {
         $('changeVal').textContent = 'Rp 0 (Pas)';
         $('change').style.background = 'var(--soft)';
-        return;
+      } else {
+        $('changeVal').textContent = rp(Math.max(0, difference));
+        $('change').style.background = (cashVal !== '' && difference < 0) ? 'var(--redsoft)' : 'var(--soft)';
       }
-      const cash = Number($('cash')?.value || 0);
-      const difference = cash - total();
-      $('changeVal').textContent = rp(Math.max(0, difference));
-      $('change').style.background = cash && difference < 0 ? 'var(--redsoft)' : 'var(--soft)';
     }
 
     function updateTotalSummary() {
@@ -546,11 +536,10 @@
       if (!cart.length) return toast('Keranjang masih kosong.');
 
       let cashReceived = Number($('cash').value || 0);
-      if (paymentMethod === 'qris') {
+      if (paymentMethod === 'qris' && !cashReceived && transactionTotal > 0) {
         cashReceived = transactionTotal;
-      } else {
-        if (cashReceived < transactionTotal) return toast('Uang diterima kurang.');
       }
+      if (cashReceived < transactionTotal) return toast('Uang diterima kurang.');
 
       const checkoutBtn = $('checkout');
       checkoutBtn.disabled = true;
