@@ -128,11 +128,15 @@ if(!isUmkm){
  $('reorder').parentElement.style.display='none';
  $('ownerFilter').parentElement.style.display='none';
  $('stock').parentElement.style.display='';
- $('resetStockZero').style.display='block';
- $('saveStorage').textContent='💾 Simpan Stok & Ingredient';
- document.querySelector('.card .title h3').textContent='Kelola Stok & Ingredient Produk Titipan';
- document.querySelector('.hero p').textContent='Lihat produk titipan milik Anda, perbarui jumlah stok produk, reset stok menjadi 0 jika ada refund sisa produk, dan perbarui daftar ingredient.';
- document.querySelector('.hero .note').textContent='📦 Sisa produk tidak lagi direset otomatis ke 0 pada pukul 01.00 WITA. Pemilik (owner) dapat mengubah stok atau mereset stok ke 0 secara manual apabila ada pengembalian dana (refund) untuk sisa produk.';
+ $('stock').readOnly=true;
+ $('stock').style.backgroundColor='#f4fbf4';
+ $('stock').style.cursor='not-allowed';
+ $('stock').title='Stok dikelola langsung oleh pihak kasir/toko';
+ $('resetStockZero').style.display='none';
+ $('saveStorage').textContent='💾 Simpan Ingredient';
+ document.querySelector('.card .title h3').textContent='Kelola Ingredient Produk';
+ document.querySelector('.hero p').textContent='Lihat produk titipan milik Anda dan kelola daftar ingredient / bahan produk.';
+ document.querySelector('.hero .note').textContent='💡 Akun UMKM hanya dapat menginput dan mengedit bahan (ingredient) produk. Jumlah stok dan data produk lainnya dikelola langsung oleh pihak toko/kasir.';
 }
 function parseIngredients(text){return String(text||'').split(/[\n,]+/).map(v=>v.trim()).filter(Boolean).map(item=>{let m=item.match(/^(.+?)\s*[:\-]\s*(.+)$/);if(!m)m=item.match(/^(.+?)\s+(\d+(?:[.,]\d+)?\s*(?:g|kg|ml|l|pcs|buah|sdm|sdt|%|unit)?)$/i);return m?{name:m[1].trim(),qty:m[2].trim()}:{name:item,qty:''}})}
 function formatIngredients(list){return (list||[]).map(i=>i.qty?`${i.name}: ${i.qty}`:i.name).join(', ')}
@@ -159,48 +163,35 @@ $('claimOwnerCodeButton').addEventListener('click',async()=>{
 $('owner').addEventListener('change',()=>{$('ownerCode').value=ownerMetadata($('owner').value)?.code||''});
 ['owner','stock','reorder','ingredients'].forEach(id=>$(id).addEventListener('input',()=>{storageFormDirty=true}));
 $('ownerFilter').addEventListener('change',render);
-async function saveOwnerStorage(customNote){
+async function saveOwnerStorage(){
  const p=products.find(x=>x.id===selectedId);
  if(!p)return toast('Pilih produk terlebih dahulu.');
  const ingredients=parseIngredients($('ingredients').value);
- const nextStock=Math.max(0,Number($('stock').value)||0);
- const prevStock=Math.max(0,Number(p.stock)||0);
- const isRefund=(nextStock===0 && prevStock>0);
- const note=customNote||(isRefund
-  ?'Pengembalian dana (refund) sisa produk oleh pemilik (owner)'
-  :(nextStock<prevStock?'Pengurangan stok oleh pemilik (owner)':'Penambahan stok oleh pemilik (owner)'));
 
  $('saveStorage').disabled=true;
- if($('resetStockZero'))$('resetStockZero').disabled=true;
  try{
-  const updated=await KasirAuth.updateOwnerProductStorage(p.id,nextStock,ingredients,note);
-  p.stock=typeof updated.stock!=='undefined'?Number(updated.stock):nextStock;
+  const updated=await KasirAuth.updateOwnerProductIngredients(p.id,ingredients);
   p.ingredients=Array.isArray(updated.ingredients)?updated.ingredients:ingredients;
   storageFormDirty=false;
   loadForm();
   render();
-  if(isRefund){
-   toast(`Sisa stok ${p.name || 'produk'} berhasil direset ke 0 (refund) ✅`);
-  }else{
-   toast('Stok dan ingredient produk berhasil disimpan ✅');
-  }
-  await loadSharedHistory();
+  toast('Ingredient produk berhasil disimpan ✅');
  }catch(error){
-  console.error('Pembaruan produk owner gagal:',error);
-  toast(`Pembaruan gagal: ${error.message}`);
+  console.error('Pembaruan ingredient produk gagal:',error);
+  toast(`Penyimpanan ingredient gagal: ${error.message}`);
  }finally{
   $('saveStorage').disabled=false;
-  if($('resetStockZero'))$('resetStockZero').disabled=false;
  }
 }
 $('resetStockZero')?.addEventListener('click',async()=>{
+ if(isUmkm)return;
  const p=products.find(x=>x.id===selectedId);
  if(!p)return toast('Pilih produk terlebih dahulu.');
  const curStock=Number(p.stock||0);
  if(curStock<=0)return toast(`Stok ${p.name||'produk ini'} sudah 0.`);
  if(!confirm(`Yakin ingin mereset sisa stok "${p.name||'produk ini'}" (${curStock} pcs) menjadi 0 untuk pengembalian dana (refund)?`))return;
  $('stock').value=0;
- await saveOwnerStorage('Pengembalian dana (refund) sisa produk oleh pemilik (owner)');
+ $('saveStorage').click();
 });
 $('saveStorage').addEventListener('click',async()=>{
  const p=products.find(x=>x.id===selectedId);
@@ -283,7 +274,7 @@ async function refreshStorageData(){
 window.addEventListener('focus',refreshStorageData);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')void refreshStorageData()});
 window.setInterval(()=>{if(document.visibilityState==='visible')void refreshStorageData()},60_000);
-function render(){const rows=$('rows'),alerts=$('alerts'),filter=$('ownerFilter').value;rows.innerHTML='';let low=0;const visible=products.filter(p=>!filter||String(p.ownerCode||'')===filter);const groups=new Map();visible.forEach(p=>{const key=p.ownerCode||'~~~~';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p)});[...groups].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([code,items])=>{const heading=document.createElement('tr');heading.innerHTML=`<td colspan="7"><b>${code==='~~~~'?'Belum diatur':`Kode UMKM ${esc(code)} · ${esc(items[0].owner||'Belum diatur')}`}</b></td>`;heading.style.background='var(--soft2)';rows.appendChild(heading);items.forEach(p=>{const isLow=Number(p.stock||0)<=Number(p.reorder||0);if(isLow)low++;const tr=document.createElement('tr');const actionBtns=isUmkm?`<div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn secondary edit-stock">Kelola</button>${Number(p.stock||0)>0?`<button class="btn danger quick-refund" title="Reset sisa stok ke 0 jika ada refund">Refund (0)</button>`:''}</div>`:`<button class="btn secondary edit-stock">Edit</button>`;tr.innerHTML=`<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code||p.productCode||'')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode||'----')}<div class="small">${esc(p.owner||'Belum diatur')}</div></td><td><span class="stock-num ${isLow?'stock-low':''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow?'warn':'good'}">${isLow?'Perlu Restok':'Aman'}</span></td><td>${p.ingredients?.length?esc(formatIngredients(p.ingredients)):'<span class="small">Belum diisi</span>'}</td><td>${actionBtns}</td>`;tr.querySelector('.edit-stock').onclick=()=>{selectedId=p.id;$('product').value=p.id;loadForm();window.scrollTo({top:0,behavior:'smooth'})};const refundBtn=tr.querySelector('.quick-refund');if(refundBtn){refundBtn.onclick=async()=>{selectedId=p.id;$('product').value=p.id;loadForm();const curStock=Number(p.stock||0);if(curStock<=0)return toast(`Stok ${p.name} sudah 0.`);if(!confirm(`Yakin ingin mereset sisa stok "${p.name}" (${curStock} pcs) menjadi 0 untuk refund sisa produk?`))return;$('stock').value=0;await saveOwnerStorage('Pengembalian dana (refund) sisa produk oleh pemilik (owner)')}};rows.appendChild(tr)})});$('empty').style.display=visible.length?'none':'block';$('lowTag').textContent=`${low} stok rendah`;alerts.innerHTML=low?`<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>`:''}
+function render(){const rows=$('rows'),alerts=$('alerts'),filter=$('ownerFilter').value;rows.innerHTML='';let low=0;const visible=products.filter(p=>!filter||String(p.ownerCode||'')===filter);const groups=new Map();visible.forEach(p=>{const key=p.ownerCode||'~~~~';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p)});[...groups].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([code,items])=>{const heading=document.createElement('tr');heading.innerHTML=`<td colspan="7"><b>${code==='~~~~'?'Belum diatur':`Kode UMKM ${esc(code)} · ${esc(items[0].owner||'Belum diatur')}`}</b></td>`;heading.style.background='var(--soft2)';rows.appendChild(heading);items.forEach(p=>{const isLow=Number(p.stock||0)<=Number(p.reorder||0);if(isLow)low++;const tr=document.createElement('tr');const actionBtns=isUmkm?`<button class="btn secondary edit-stock">Input Ingredient</button>`:`<button class="btn secondary edit-stock">Edit</button>`;tr.innerHTML=`<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code||p.productCode||'')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode||'----')}<div class="small">${esc(p.owner||'Belum diatur')}</div></td><td><span class="stock-num ${isLow?'stock-low':''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow?'warn':'good'}">${isLow?'Perlu Restok':'Aman'}</span></td><td>${p.ingredients?.length?esc(formatIngredients(p.ingredients)):'<span class="small">Belum diisi</span>'}</td><td>${actionBtns}</td>`;tr.querySelector('.edit-stock').onclick=()=>{selectedId=p.id;$('product').value=p.id;loadForm();if(isUmkm)$('ingredients').focus();window.scrollTo({top:0,behavior:'smooth'})};rows.appendChild(tr)})});$('empty').style.display=visible.length?'none':'block';$('lowTag').textContent=`${low} stok rendah`;alerts.innerHTML=low?`<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>`:''}
 window.addEventListener('storage',async()=>{
  if(isUmkm){
   try{products=await KasirAuth.listOwnerStorageProducts()}
