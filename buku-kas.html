@@ -89,19 +89,8 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
  .title h3{min-width:0;overflow-wrap:anywhere}
  .filters{min-width:0;flex-direction:column}
  .filters>div{min-width:0!important;width:100%}
- .recap-table{overflow:visible;border:0}
- .recap-table table,.recap-table tbody,.recap-table tr,.recap-table td{display:block;width:100%;min-width:0}
- .recap-table thead{display:none}
- .recap-table tbody{display:grid;gap:10px}
- .recap-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:10px;border:1px solid var(--line);border-radius:14px;background:#fff}
- .recap-table td{min-width:0;padding:8px 5px;border:0;text-align:center;overflow-wrap:anywhere}
- .recap-table td::before{content:attr(data-label);display:block;margin-bottom:4px;color:var(--muted);font:700 10px var(--font)}
- .recap-table td.owner-cell,.recap-table td.product-cell{grid-column:1/-1;text-align:left;padding:6px 4px}
- .recap-table td.owner-cell::before{display:none}
- .recap-table td.product-cell{padding-top:8px;border-bottom:1px solid var(--line)}
- .recap-table td.pay-cell{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px 4px;border-top:1px solid var(--line);text-align:right}
- .recap-table td.pay-cell::before{margin:0;text-align:left}
- .recap-table .small{overflow-wrap:anywhere}
+ .umkm-recap-block{margin-bottom:18px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+ .umkm-recap-block .table{border:0;border-radius:0;margin:0}
 }
 </style>    <script src="auth.js"></script>
 <link rel="stylesheet" href="shared-navbar.css">
@@ -123,7 +112,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><div style="flex:2;min-width:180px"><input id="search" placeholder="Cari transaksi (keterangan, ID, metode)..."></div><div style="display:flex;gap:8px;flex:3;min-width:280px;align-items:center;flex-wrap:wrap"><div style="min-width:130px;flex:1"><select id="periodMode" aria-label="Pilihan periode"><option value="all">Semua Waktu</option><option value="daily">Per Hari (Harian)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="filterDayWrap" style="display:none;min-width:130px;flex:1"><input id="filterDay" type="date" aria-label="Pilih tanggal"></div><div id="filterMonthWrap" style="display:none;min-width:130px;flex:1"><select id="month" aria-label="Pilih bulan"><option value="all">Semua Bulan</option></select></div></div></div><div class="table"><table class="ledger-table"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Metode</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Rekap Titipan per Produk</h3><span class="tag">Harian · Otomatis dari Storage &amp; Kasir</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div style="min-width:180px;flex:1"><label class="label" for="recapDate">Tanggal Rekap</label><input id="recapDate" type="date"></div><div id="recapOwnerFilterWrap" style="min-width:220px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:10px"></div><div class="table recap-table"><table><thead><tr><th>UMKM</th><th>Produk</th><th>Dititip pada tanggal (unit)</th><th>Laku (unit)</th><th>Belum laku dari titipan (unit)</th><th>Sisa stok (unit)</th><th>Harus dibayar (HPP / Modal)</th></tr></thead><tbody id="recapRows"></tbody></table><div id="recapEmpty" class="empty">Belum ada produk titipan atau penjualan pada tanggal ini.</div></div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Rekapan UMKM</h3><span class="tag" id="recapModeTag">Harian</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end"><div style="min-width:140px;flex:1"><label class="label" for="recapPeriodMode">Periode Waktu</label><select id="recapPeriodMode"><option value="daily" selected>Per Hari (Harian)</option><option value="weekly">Per Minggu (Mingguan)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="recapDayWrap" style="min-width:140px;flex:1"><label class="label" for="recapDate">Pilih Tanggal</label><input id="recapDate" type="date"></div><div id="recapWeekWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapWeekDate">Pilih Tanggal Acuan Minggu</label><input id="recapWeekDate" type="date"></div><div id="recapMonthWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapMonth">Pilih Bulan</label><input id="recapMonth" type="month"></div><div id="recapOwnerFilterWrap" style="min-width:180px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapSummaryBanner" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:var(--soft2);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:12px"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Periode Terpilih</div><div id="recapPeriodLabel" style="font-size:13px;font-weight:800;color:#173120">—</div></div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div><span class="small" style="display:block">Total Dititip</span><b id="recapGrandDeposited" style="font-size:13px;color:#173120">0 unit</b></div><div><span class="small" style="display:block">Total Laku</span><b id="recapGrandSold" style="font-size:13px;color:#328f46">0 unit</b></div><div><span class="small" style="display:block">Total Pendapatan (HPP / Modal)</span><b id="recapGrandRevenue" class="money in" style="font-size:14px">Rp 0</b></div></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:12px"></div><div id="recapContainer"></div><div id="recapEmpty" class="empty" style="display:none">Belum ada produk titipan atau penjualan pada periode ini.</div></div>
 </div>
 <div>
 <div class="card"><div class="title"><h3>Rekap Bulanan</h3><span class="tag">Otomatis</span></div><div id="months" class="months"></div><div id="monthEmpty" class="empty">Belum ada data.</div></div>
@@ -163,8 +152,10 @@ let bookkeeping={cash:[],sales:[]};
 let stockMovements=[],ownerAccounts=[],inventoryProducts=[];
 let recapLoadErrors=[];
 $("date").value=today();
-$("recapDate").value=today();
 if($("filterDay"))$("filterDay").value=today();
+if($("recapDate"))$("recapDate").value=today();
+if($("recapWeekDate"))$("recapWeekDate").value=today();
+if($("recapMonth"))$("recapMonth").value=today().slice(0,7);
 
 function updatePeriodFilterUI(){
  const mode=$("periodMode")?.value||"all";
@@ -176,6 +167,19 @@ function updatePeriodFilterUI(){
   $("filterDay").value=today();
  }
 }
+
+function updateRecapPeriodFilterUI(){
+ const mode=$("recapPeriodMode")?.value||"daily";
+ const dayWrap=$("recapDayWrap");
+ const weekWrap=$("recapWeekWrap");
+ const monthWrap=$("recapMonthWrap");
+ if(dayWrap)dayWrap.style.display=mode==="daily"?"block":"none";
+ if(weekWrap)weekWrap.style.display=mode==="weekly"?"block":"none";
+ if(monthWrap)monthWrap.style.display=mode==="monthly"?"block":"none";
+ const tag=$("recapModeTag");
+ if(tag)tag.textContent=mode==="daily"?"Harian":mode==="weekly"?"Mingguan":"Bulanan";
+}
+updateRecapPeriodFilterUI();
 
 if(!isManager){
  document.querySelector(".stats").style.display="none";
@@ -277,10 +281,81 @@ function populateRecapOwnerFilter(){
  select.innerHTML='<option value="">Semua UMKM</option>'+[...owners].sort((a,b)=>a[0].localeCompare(b[0])).map(([code,label])=>`<option value="${esc(code)}">${esc(label)}</option>`).join("");
  if([...select.options].some(option=>option.value===selected))select.value=selected;
 }
+
+function getRecapDateRange(){
+ const mode=$("recapPeriodMode")?.value||"daily";
+ if(mode==="daily"){
+  const day=$("recapDate")?.value||today();
+  const startMs=Date.parse(`${day}T00:00:00+08:00`);
+  const endMs=startMs+86400000;
+  const label=fmtDate(`${day}T12:00:00+08:00`);
+  return {
+   mode,
+   label:`Harian (${label})`,
+   shortLabel:label,
+   startMs,
+   endMs,
+   isMatchSale:(dateStr)=>dateInWita(dateStr)===day,
+   isMatchMovement:(ms)=>ms>=startMs&&ms<endMs
+  };
+ }
+ if(mode==="weekly"){
+  const ref=$("recapWeekDate")?.value||today();
+  const d=new Date(`${ref}T12:00:00+08:00`);
+  const dayOfWeek=d.getDay();
+  const diffToMonday=dayOfWeek===0?-6:1-dayOfWeek;
+  const monDate=new Date(d.getTime()+diffToMonday*86400000);
+  const sunDate=new Date(monDate.getTime()+6*86400000);
+  const monStr=dateInWita(monDate);
+  const sunStr=dateInWita(sunDate);
+  const startMs=Date.parse(`${monStr}T00:00:00+08:00`);
+  const endMs=Date.parse(`${sunStr}T23:59:59.999+08:00`)+1;
+  const label=`${fmtDate(`${monStr}T12:00:00+08:00`)} s.d. ${fmtDate(`${sunStr}T12:00:00+08:00`)}`;
+  return {
+   mode,
+   label:`Mingguan (${label})`,
+   shortLabel:label,
+   startMs,
+   endMs,
+   isMatchSale:(dateStr)=>{
+    const w=dateInWita(dateStr);
+    return w>=monStr&&w<=sunStr;
+   },
+   isMatchMovement:(ms)=>ms>=startMs&&ms<endMs
+  };
+ }
+ if(mode==="monthly"){
+  const monthVal=$("recapMonth")?.value||today().slice(0,7);
+  const [yStr,mStr]=monthVal.split("-");
+  const y=parseInt(yStr,10),m=parseInt(mStr,10);
+  const nextY=m===12?y+1:y,nextM=m===12?1:m+1;
+  const startMs=Date.parse(`${yStr}-${String(m).padStart(2,"0")}-01T00:00:00+08:00`);
+  const nextMStr=`${nextY}-${String(nextM).padStart(2,"0")}-01T00:00:00+08:00`;
+  const endMs=Date.parse(nextMStr);
+  const monthDate=new Date(startMs+86400000*5);
+  const monthName=new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Makassar",month:"long",year:"numeric"}).format(monthDate);
+  return {
+   mode,
+   label:`Bulanan (${monthName})`,
+   shortLabel:monthName,
+   startMs,
+   endMs,
+   isMatchSale:(dateStr)=>dateInWita(dateStr).startsWith(monthVal),
+   isMatchMovement:(ms)=>ms>=startMs&&ms<endMs
+  };
+ }
+ return null;
+}
+
 function renderConsignmentRecap(){
- const day=$("recapDate").value,filter=$("recapOwnerFilter").value;
- if(!day){$("recapRows").innerHTML="";$("recapEmpty").style.display="block";return}
- const start=Date.parse(`${day}T00:00:00+08:00`),end=start+86400000;
+ const range=getRecapDateRange();
+ if(!range){
+  $("recapContainer").innerHTML="";
+  $("recapEmpty").style.display="block";
+  return;
+ }
+ $("recapPeriodLabel").textContent=range.label;
+ const filter=$("recapOwnerFilter")?.value||"";
  const products=new Map();
  const productKey=item=>{
   const code=item.code||item.productCode||item.product_code;
@@ -291,99 +366,181 @@ function renderConsignmentRecap(){
   if(id)return `id:${id}`;
   return `name:${String(item.ownerCode||item.owner_code||"")}:${String(item.name||item.product_name||"").trim().toLowerCase()}`;
  };
-  const ensureProduct=(code,name,item={})=>{
-   code=String(code||"");
-   if(!/^\d{4}$/.test(code))return null;
-   const key=`${code}:${productKey(item)}`;
-   if(!products.has(key))products.set(key,{
-    ownerCode:code,ownerName:name||`UMKM ${code}`,
-    productName:item.name||item.product_name||"Produk tanpa nama",
-    productCode:item.code||item.productCode||item.product_code||item.barcode||"",
-    unitCost:Number(item.cost||0),
-    unitPrice:Number(item.price||0),
-    deposited:0,sold:0,costTotal:0,revenue:0,remaining:0,hasMovement:false,
-    currentStock:null,createdAt:item.createdAt||item.created_at||""
-   });
-   const product=products.get(key);
-   if(name)product.ownerName=name;
-   if(item.name||item.product_name)product.productName=item.name||item.product_name;
-   if(item.code||item.productCode||item.product_code||item.barcode)product.productCode=item.code||item.productCode||item.product_code||item.barcode;
-   if(item.createdAt||item.created_at)product.createdAt=item.createdAt||item.created_at;
-   if(!product.unitCost&&Number(item.cost||0))product.unitCost=Number(item.cost||0);
-   if(!product.unitPrice&&Number(item.price||0))product.unitPrice=Number(item.price||0);
-   return product;
-  };
-  inventoryProducts.forEach(item=>{
-   if(day!==today()&&item.createdAt&&dateInWita(item.createdAt)>day)return;
-   const product=ensureProduct(item.ownerCode||item.owner_code,item.owner||item.owner_name,item);
-   if(product){
-    product.currentStock=Math.max(0,Number(item.stock)||0);
-    if(Number(item.cost||0))product.unitCost=Number(item.cost||0);
-    if(Number(item.price||0))product.unitPrice=Number(item.price||0);
-   }
+ const ensureProduct=(code,name,item={})=>{
+  code=String(code||"");
+  if(!/^\d{4}$/.test(code))return null;
+  const key=`${code}:${productKey(item)}`;
+  if(!products.has(key))products.set(key,{
+   ownerCode:code,
+   ownerName:name||`UMKM ${code}`,
+   productName:item.name||item.product_name||"Produk tanpa nama",
+   productCode:item.code||item.productCode||item.product_code||item.barcode||"",
+   unitCost:Number(item.cost||0),
+   unitPrice:Number(item.price||0),
+   deposited:0,
+   sold:0,
+   costTotal:0,
+   revenue:0,
+   createdAt:item.createdAt||item.created_at||""
   });
-  bookkeeping.sales.forEach(item=>{
-   if(dateInWita(item.date)!==day)return;
-   const product=ensureProduct(item.owner_code,item.owner_name,item);
-   if(!product)return;
-   const quantity=Number(item.qty)||0;
-   product.sold+=quantity;
+  const product=products.get(key);
+  if(name)product.ownerName=name;
+  if(item.name||item.product_name)product.productName=item.name||item.product_name;
+  if(item.code||item.productCode||item.product_code||item.barcode)product.productCode=item.code||item.productCode||item.product_code||item.barcode;
+  if(item.createdAt||item.created_at)product.createdAt=item.createdAt||item.created_at;
+  if(!product.unitCost&&Number(item.cost||0))product.unitCost=Number(item.cost||0);
+  if(!product.unitPrice&&Number(item.price||0))product.unitPrice=Number(item.price||0);
+  return product;
+ };
 
-   // Dapatkan Harga Modal / HPP per unit (Rp)
-   let unitCost=Number(item.cost||0);
-   if(!unitCost&&product.unitCost){
-    unitCost=product.unitCost;
-   }
-   if(!unitCost){
-    const matched=inventoryProducts.find(p=>
-     (item.code&&(p.code===item.code||p.productCode===item.code))||
-     (item.barcode&&p.barcode===item.barcode)||
-     (item.id&&p.id===item.id)||
-     (p.name&&item.name&&p.name.trim().toLowerCase()===item.name.trim().toLowerCase())
-    );
-    if(matched&&Number(matched.cost||0)){
-     unitCost=Number(matched.cost||0);
-     product.unitCost=unitCost;
-    }
-   }
+ inventoryProducts.forEach(item=>{
+  const product=ensureProduct(item.ownerCode||item.owner_code,item.owner||item.owner_name,item);
+  if(product){
+   if(Number(item.cost||0))product.unitCost=Number(item.cost||0);
+   if(Number(item.price||0))product.unitPrice=Number(item.price||0);
+  }
+ });
 
-   // Hitung kewajiban bayar ke UMKM berdasarkan Harga Modal / HPP per unit (bukan Harga Jual toko)
-   product.costTotal=(product.costTotal||0)+(unitCost*quantity);
-   product.revenue=product.costTotal;
+ bookkeeping.sales.forEach(item=>{
+  if(!range.isMatchSale(item.date))return;
+  const product=ensureProduct(item.owner_code,item.owner_name,item);
+  if(!product)return;
+  const quantity=Number(item.qty)||0;
+  product.sold+=quantity;
+
+  let unitCost=Number(item.cost||0);
+  if(!unitCost&&product.unitCost){
+   unitCost=product.unitCost;
+  }
+  if(!unitCost){
+   const matched=inventoryProducts.find(p=>
+    (item.code&&(p.code===item.code||p.productCode===item.code))||
+    (item.barcode&&p.barcode===item.barcode)||
+    (item.id&&p.id===item.id)||
+    (p.name&&item.name&&p.name.trim().toLowerCase()===item.name.trim().toLowerCase())
+   );
+   if(matched&&Number(matched.cost||0)){
+    unitCost=Number(matched.cost||0);
+    product.unitCost=unitCost;
+   }
+  }
+
+  product.costTotal=(product.costTotal||0)+(unitCost*quantity);
+  product.revenue=product.costTotal;
+ });
+
+ stockMovements.forEach(movement=>{
+  const at=Date.parse(movement.occurred_at);
+  const quantity=Number(movement.quantity)||0;
+  if(!Number.isFinite(at)||!range.isMatchMovement(at))return;
+  const product=ensureProduct(movement.owner_code,movement.owner_name,{
+   id:movement.product_id,code:movement.product_code,name:movement.product_name
   });
-  stockMovements.forEach(movement=>{
-   const product=ensureProduct(movement.owner_code,movement.owner_name,{
-    id:movement.product_id,code:movement.product_code,name:movement.product_name
+  if(!product)return;
+  if(["opening","stock_in"].includes(movement.movement_type)){
+   product.deposited+=quantity;
+  }
+ });
+
+ const filteredProducts=[...products.values()].filter(product=>!filter||product.ownerCode===filter);
+
+ const ownerGroups=new Map();
+ filteredProducts.forEach(prod=>{
+  if(!ownerGroups.has(prod.ownerCode)){
+   ownerGroups.set(prod.ownerCode,{
+    code:prod.ownerCode,
+    name:prod.ownerName,
+    products:[]
    });
-   if(!product)return;
-   const at=Date.parse(movement.occurred_at),quantity=Number(movement.quantity)||0;
-   if(!Number.isFinite(at)||at>=end)return;
-   product.hasMovement=true;
-   if(at>=start&&["opening","stock_in"].includes(movement.movement_type))product.deposited+=quantity;
-   if(["opening","stock_in"].includes(movement.movement_type))product.remaining+=quantity;
-   else product.remaining-=quantity;
-  });
-  const rows=[...products.values()].filter(product=>!filter||product.ownerCode===filter)
-   .sort((a,b)=>a.ownerCode.localeCompare(b.ownerCode)||a.productName.localeCompare(b.productName,"id"))
-   .map(product=>{
-    const remaining=day===today()&&product.currentStock!==null
-     ?product.currentStock
-     :product.hasMovement?Math.max(0,product.remaining):null;
-    const unsold=Math.max(0,product.deposited-product.sold);
-    const hppLabel=product.unitCost?`HPP: ${rp(product.unitCost)}`:'';
-    const productSub=[product.productCode||"—",hppLabel].filter(Boolean).join(" · ");
-    return `<tr><td class="owner-cell" data-label="UMKM"><div><b>${esc(product.ownerName)}</b><div class="small">Kode ${esc(product.ownerCode)}</div></div></td><td class="product-cell" data-label="Produk"><div><b>${esc(product.productName)}</b><div class="small">${esc(productSub)}</div></div></td><td data-label="Dititip">${product.deposited}</td><td data-label="Laku">${product.sold}</td><td data-label="Belum laku">${unsold}</td><td data-label="Sisa stok">${remaining===null?"—":remaining}</td><td class="pay-cell money in" data-label="Harus dibayar (HPP)">${rp(product.revenue)}</td></tr>`;
-  });
-  $("recapRows").innerHTML=rows.join("");
-  $("recapEmpty").style.display=rows.length?"none":"block";
-  const firstMovement=stockMovements.map(item=>item.occurred_at).filter(Boolean).sort()[0];
-  const coverage=firstMovement
-   ?start<Date.parse(firstMovement)
-    ?" Mutasi stok belum tercatat pada tanggal tersebut; jumlah titipan dan sisa bisa tidak lengkap."
-    :` Riwayat mutasi tersedia sejak ${fmtDate(firstMovement)}.`
-   :" Belum ada riwayat mutasi stok; jumlah titipan dan sisa belum dapat dihitung.";
-  const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
-  $("recapNotice").textContent=`Rekap tanggal ${fmtDate(`${day}T12:00:00+08:00`)} · setiap produk memiliki baris sendiri; pembayaran dihitung dari Harga Modal atau HPP per unit dikali unit yang laku pada tanggal ini (bukan harga jual toko). "Belum laku dari titipan" adalah titipan tanggal ini dikurangi unit terjual. Sisa stok memakai stok Storage untuk hari ini atau mutasi stok hingga akhir tanggal yang dipilih.${coverage}${loadError}`;
+  }
+  ownerGroups.get(prod.ownerCode).products.push(prod);
+ });
+
+ const sortedOwners=[...ownerGroups.values()].sort((a,b)=>a.code.localeCompare(b.code));
+
+ let grandDeposited=0;
+ let grandSold=0;
+ let grandRevenue=0;
+
+ const htmlBlocks=sortedOwners.map(owner=>{
+  let ownerDeposited=0;
+  let ownerSold=0;
+  let ownerRevenue=0;
+
+  owner.products.sort((a,b)=>a.productName.localeCompare(b.productName,"id"));
+
+  const productRows=owner.products.map(prod=>{
+   ownerDeposited+=prod.deposited;
+   ownerSold+=prod.sold;
+   ownerRevenue+=prod.revenue;
+
+   const hppLabel=prod.unitCost?`HPP: ${rp(prod.unitCost)}`:"";
+   const productSub=[prod.productCode||"—",hppLabel].filter(Boolean).join(" · ");
+
+   return `<tr>
+    <td>
+     <div style="font-weight:700;color:#173120">${esc(prod.productName)}</div>
+     <div class="small">${esc(productSub)}</div>
+    </td>
+    <td style="text-align:center">${prod.deposited} unit</td>
+    <td style="text-align:center;font-weight:700">${prod.sold} unit</td>
+    <td class="money in" style="text-align:right">${rp(prod.revenue)}</td>
+   </tr>`;
+  }).join("");
+
+  grandDeposited+=ownerDeposited;
+  grandSold+=ownerSold;
+  grandRevenue+=ownerRevenue;
+
+  return `
+  <div class="umkm-recap-block" style="margin-bottom:18px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.03)">
+   <div style="background:var(--soft2);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--line)">
+    <div style="display:flex;align-items:center;gap:8px">
+     <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#328f46"></span>
+     <strong style="font-size:13.5px;color:#173120">${esc(owner.name)}</strong>
+     <span class="pill" style="padding:2px 8px;font-size:10px">Kode: ${esc(owner.code)}</span>
+    </div>
+    <div style="font-size:11.5px">
+     Total Pembayaran: <strong class="money in" style="font-size:13px">${rp(ownerRevenue)}</strong>
+    </div>
+   </div>
+   <div class="table" style="border:0;border-radius:0;margin:0">
+    <table style="min-width:520px">
+     <thead>
+      <tr>
+       <th style="width:46%">Produk</th>
+       <th style="text-align:center;width:18%">Jumlah Dititipkan</th>
+       <th style="text-align:center;width:18%">Jumlah Laku</th>
+       <th style="text-align:right;width:18%">Total Pendapatan (HPP / Modal)</th>
+      </tr>
+     </thead>
+     <tbody>
+      ${productRows}
+     </tbody>
+     <tfoot>
+      <tr style="background:#f4f9f4;font-weight:bold;border-top:2px solid var(--line)">
+       <td style="padding:11px 10px;color:#173120;font-size:11.5px">
+        TOTAL KESELURUHAN PENJUALAN (${esc(owner.name)})
+       </td>
+       <td style="text-align:center;padding:11px 10px;color:#173120">${ownerDeposited} unit</td>
+       <td style="text-align:center;padding:11px 10px;color:#173120">${ownerSold} unit</td>
+       <td class="money in" style="text-align:right;padding:11px 10px;font-size:13px">${rp(ownerRevenue)}</td>
+      </tr>
+     </tfoot>
+    </table>
+   </div>
+  </div>`;
+ }).join("");
+
+ $("recapGrandDeposited").textContent=`${grandDeposited} unit`;
+ $("recapGrandSold").textContent=`${grandSold} unit`;
+ $("recapGrandRevenue").textContent=rp(grandRevenue);
+
+ $("recapContainer").innerHTML=htmlBlocks;
+ $("recapEmpty").style.display=sortedOwners.length?"none":"block";
+
+ const loadError=recapLoadErrors.length?` Sebagian data gagal dimuat: ${recapLoadErrors.join(" · ")}`:"";
+ $("recapNotice").textContent=`Rekap ${range.label} · Menampilkan jumlah barang dititipkan, barang laku, dan total pendapatan (HPP / Modal yang wajib dibayarkan ke UMKM) per produk beserta total keseluruhan per UMKM.${loadError}`;
 }
 async function loadBookkeeping(){
  $("bookkeepingNotice").textContent="Memuat data Buku Kas sesuai hak akses...";
@@ -417,7 +574,11 @@ $("search").oninput=render;
 $("periodMode").onchange=()=>{updatePeriodFilterUI();render()};
 $("filterDay").onchange=render;
 $("month").onchange=render;
-$("recapDate").onchange=renderConsignmentRecap;$("recapOwnerFilter").onchange=renderConsignmentRecap;
+$("recapPeriodMode").onchange=()=>{updateRecapPeriodFilterUI();renderConsignmentRecap()};
+$("recapDate").onchange=renderConsignmentRecap;
+$("recapWeekDate").onchange=renderConsignmentRecap;
+$("recapMonth").onchange=renderConsignmentRecap;
+$("recapOwnerFilter").onchange=renderConsignmentRecap;
 $("export").onclick=()=>{
  if(!isManager)return;
  let csv="Tanggal,ID,Keterangan,Jenis,Metode Pembayaran,Masuk,Keluar,Saldo\n";
