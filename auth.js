@@ -125,6 +125,42 @@
     if (productsChanged) window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
   }
 
+  function mergeProductArrays(existing, incoming) {
+    const map = new Map();
+    for (const p of (Array.isArray(existing) ? existing : [])) {
+      const key = String(p.id || p.barcode || p.code || p.productCode || '');
+      if (key) map.set(key, { ...p });
+    }
+    for (const p of (Array.isArray(incoming) ? incoming : [])) {
+      const key = String(p.id || p.barcode || p.code || p.productCode || '');
+      if (key) {
+        if (map.has(key)) {
+          map.set(key, { ...map.get(key), ...p });
+        } else {
+          map.set(key, { ...p });
+        }
+      }
+    }
+    return [...map.values()];
+  }
+
+  function handleIncomingProductDeleted({ id, products }) {
+    const lk = localKey('products');
+    hydrating = true;
+    try {
+      if (Array.isArray(products)) {
+        originalSetItem(lk, JSON.stringify(products));
+      } else if (id) {
+        const current = readLocal(lk, []);
+        const filtered = (Array.isArray(current) ? current : []).filter(p => String(p.id) !== String(id) && String(p.code) !== String(id));
+        originalSetItem(lk, JSON.stringify(filtered));
+      }
+      window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+    } finally {
+      hydrating = false;
+    }
+  }
+
   function handleIncomingDataUpdate(key, value) {
     if (!DATA_NAMES.includes(key) || !Array.isArray(value)) return;
     const lk = localKey(key);
@@ -149,7 +185,9 @@
           window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: key } }));
         }
       } else if (key === 'products') {
-        originalSetItem(lk, JSON.stringify(value));
+        const currentLocal = readLocal(lk, []);
+        const merged = mergeProductArrays(currentLocal, value);
+        originalSetItem(lk, JSON.stringify(merged));
         window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
       }
     } finally {
@@ -184,9 +222,9 @@
         const currentLocal = readLocal(lk, []);
         const currentProducts = Array.isArray(currentLocal) ? currentLocal : [];
         const tenantId = rowUserId || currentUser.id;
-        const remaining = currentProducts.filter(p => (p._tenantUserId || currentUser.id) !== tenantId);
-        const updated = value.map(p => ({ ...p, _tenantUserId: tenantId }));
-        const merged = [...remaining, ...updated];
+        const tenantProducts = (Array.isArray(value) ? value : []).map(p => ({ ...p, _tenantUserId: tenantId }));
+        const otherTenants = currentProducts.filter(p => (p._tenantUserId || currentUser.id) !== tenantId);
+        const merged = [...otherTenants, ...tenantProducts];
         originalSetItem(lk, JSON.stringify(merged));
         window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
       }
@@ -239,6 +277,7 @@
         console.warn('sync_user_data_products error:', err);
       }
 
+      // Fallback aman: tidak pernah menghapus data produk tenant lain menjadi []
       const grouped = new Map();
       for (const product of Array.isArray(value) ? value : []) {
         const tenantId = product._tenantUserId || currentUser.id;
@@ -246,22 +285,26 @@
         const { _tenantUserId, ...storedProduct } = product;
         grouped.get(tenantId).push(storedProduct);
       }
-      for (const tenantId of loadedProductTenantIds) {
-        if (!grouped.has(tenantId)) grouped.set(tenantId, []);
-      }
-      if (!grouped.has(currentUser.id)) grouped.set(currentUser.id, []);
-      const results = await Promise.all([...grouped].map(([userId, products]) =>
-        client.from('user_data').upsert({
-          user_id: userId,
-          key: 'products',
-          value: products,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id,key' })
-      ));
-      const failedSave = results.find(({ error }) => error)?.error;
-      if (failedSave) {
-        reportCloudError(failedSave);
-        throw failedSave;
+
+      for (const [userId, tenantProds] of grouped.entries()) {
+        try {
+          const { data: existingRow } = await client
+            .from('user_data')
+            .select('value')
+            .eq('user_id', userId)
+            .eq('key', 'products')
+            .maybeSingle();
+          const existingList = Array.isArray(existingRow?.value) ? existingRow.value : [];
+          const mergedList = mergeProductArrays(existingList, tenantProds);
+          await client.from('user_data').upsert({
+            user_id: userId,
+            key: 'products',
+            value: mergedList,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,key' });
+        } catch (saveErr) {
+          console.warn('Fallback save tenant error:', saveErr);
+        }
       }
       broadcastStoreEvent('data_updated', { key: 'products', value });
       return;
@@ -390,6 +433,10 @@
         const { key, value } = payload.payload || {};
         handleIncomingDataUpdate(key, value);
       })
+      .on('broadcast', { event: 'product_deleted' }, payload => {
+        const { id, products } = payload.payload || {};
+        handleIncomingProductDeleted({ id, products });
+      })
       .on(
         'postgres_changes',
         {
@@ -461,8 +508,46 @@
       console.warn('RPC sync_user_data_products gagal, fallback:', err);
     }
     await saveCloud('products', products);
-    originalSetItem(localKey('products'), JSON.stringify(products));
-    return products;
+    const updated = readLocal(localKey('products'), products);
+    return updated;
+  }
+
+  async function deleteProduct(productId) {
+    await ready;
+    if (!client || !session?.access_token || !currentUser || !['admin', 'cashier'].includes(currentProfile?.role)) {
+      throw new Error('Hanya Owner/Kasir yang dapat menghapus produk.');
+    }
+    const pid = String(productId || '').trim();
+    if (!pid) return readLocal(localKey('products'), []);
+
+    let updatedProducts = null;
+    try {
+      const { data, error } = await client.rpc('delete_store_product', {
+        p_product_id: pid
+      });
+      if (!error && Array.isArray(data)) {
+        updatedProducts = data;
+      }
+    } catch (err) {
+      console.warn('RPC delete_store_product gagal, fallback lokal:', err);
+    }
+
+    if (!updatedProducts) {
+      const current = readLocal(localKey('products'), []);
+      updatedProducts = current.filter(p => String(p.id) !== pid && String(p.code) !== pid);
+      await saveCloud('products', updatedProducts);
+    }
+
+    hydrating = true;
+    try {
+      originalSetItem(localKey('products'), JSON.stringify(updatedProducts));
+    } finally {
+      hydrating = false;
+    }
+
+    broadcastStoreEvent('product_deleted', { id: pid, products: updatedProducts });
+    window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+    return updatedProducts;
   }
 
   async function loadProfile(userId = currentUser?.id) {
@@ -1220,7 +1305,7 @@
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
     listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients,
-    recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, ready,
+    recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, deleteProduct, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },

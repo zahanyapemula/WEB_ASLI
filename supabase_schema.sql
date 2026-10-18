@@ -1235,11 +1235,11 @@ begin
       from (
         select distinct on (coalesce(val ->> 'id', val ->> 'code', val ->> 'barcode', val::text)) val
         from (
-          select val from jsonb_array_elements(incoming_tenant_prods) as val
+          select 1 as priority, val from jsonb_array_elements(incoming_tenant_prods) as val
           union all
-          select val from jsonb_array_elements(existing_tenant_prods) as val
+          select 2 as priority, val from jsonb_array_elements(existing_tenant_prods) as val
         ) comb
-        order by coalesce(val ->> 'id', val ->> 'code', val ->> 'barcode', val::text)
+        order by coalesce(val ->> 'id', val ->> 'code', val ->> 'barcode', val::text), priority asc
       ) item;
     end if;
 
@@ -1278,6 +1278,105 @@ $$;
 
 revoke all on function public.sync_user_data_products(jsonb, boolean) from public, anon;
 grant execute on function public.sync_user_data_products(jsonb, boolean) to authenticated;
+
+-- Fungsi hapus produk dari database toko secara atomik tanpa merusak produk lain
+create or replace function public.delete_store_product(
+  p_product_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  caller_role text;
+  caller_store_code text;
+  target_admin_id uuid;
+  final_all_products jsonb;
+begin
+  if caller_id is null then
+    raise exception 'Silakan login terlebih dahulu.';
+  end if;
+
+  select p.role, coalesce(p.store_code, '')
+    into caller_role, caller_store_code
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  if caller_role not in ('admin', 'cashier') then
+    raise exception 'Hanya Admin atau Kasir yang dapat menghapus produk.';
+  end if;
+
+  target_admin_id := caller_id;
+  if caller_role = 'cashier' and caller_store_code <> '' then
+    select p2.user_id into target_admin_id
+    from public.user_profiles p2
+    where upper(p2.store_code) = upper(caller_store_code)
+      and p2.role = 'admin'
+    order by p2.created_at asc
+    limit 1;
+    if target_admin_id is null then
+      target_admin_id := caller_id;
+    end if;
+  end if;
+
+  -- Kunci semua baris produk toko terlebih dahulu
+  perform 1 from public.user_data d
+  where d.key = 'products'
+    and (
+      d.user_id = target_admin_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    )
+  for update;
+
+  -- Hapus produk dengan ID atau code yang cocok dari seluruh tenant toko
+  update public.user_data d
+  set value = coalesce((
+    select jsonb_agg(prod.val)
+    from jsonb_array_elements(case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end) as prod(val)
+    where coalesce(prod.val ->> 'id', '') <> p_product_id
+      and coalesce(prod.val ->> 'code', '') <> p_product_id
+  ), '[]'::jsonb),
+  updated_at = now()
+  where d.key = 'products'
+    and (
+      d.user_id = target_admin_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    );
+
+  -- Ambil kembali seluruh produk toko yang tersisa
+  select coalesce(
+    jsonb_agg(
+      case
+        when d.user_id = target_admin_id then prod.val
+        else prod.val || jsonb_build_object('_tenantUserId', d.user_id)
+      end
+    ),
+    '[]'::jsonb
+  ) into final_all_products
+  from public.user_data d
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) as prod(val)
+  where d.key = 'products'
+    and (
+      d.user_id = target_admin_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    );
+
+  return final_all_products;
+end;
+$$;
+
+revoke all on function public.delete_store_product(text) from public, anon;
+grant execute on function public.delete_store_product(text) to authenticated;
 
 -- Tambahkan user_data ke supabase_realtime agar perubahan data tersiar real-time ke semua perangkat kasir
 alter table public.user_data replica identity full;

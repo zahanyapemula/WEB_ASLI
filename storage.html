@@ -908,6 +908,12 @@
                 const nextStock = Math.max(0, Number($('stock').value) || 0);
                 p.stock = nextStock; p.reorder = Math.max(0, Number($('reorder').value) || 0); p.ingredients = parseIngredients($('ingredients').value);
                 save(STORE.products, products);
+                try {
+                    const serverProducts = await KasirAuth.saveProductsAndWait([p], false);
+                    if (Array.isArray(serverProducts) && serverProducts.length) products = serverProducts.map(normalize);
+                } catch (e) {
+                    console.warn('Gagal sync produk ke server:', e);
+                }
                 populateOwnerFilter(); populateOwners(); render();
                 const delta = nextStock - previousStock;
                 if (delta && /^\d{4}$/.test(String(p.ownerCode || ''))) {

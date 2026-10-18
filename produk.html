@@ -407,10 +407,9 @@ async function addProduct(){
  };
  const addButton=$("add");
  addButton.disabled=true;
- const nextProducts=[...products,product];
  try{
-  await KasirAuth.saveProductsAndWait(nextProducts);
-  products=nextProducts;
+  const updatedProducts = await KasirAuth.saveProductsAndWait([product], false);
+  products = Array.isArray(updatedProducts) && updatedProducts.length ? updatedProducts : load(STORE.products, [...products, product]);
  }catch(error){
   console.error("Produk gagal disimpan ke Supabase:",error);
   toast(`Produk belum tersimpan ke server: ${error.message}`);
@@ -467,10 +466,10 @@ function render(){
   d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
   d.querySelector(".del").onclick=async()=>{
    if(confirm("Hapus "+p.name+"?")){
-    products=products.filter(x=>x.id!==p.id);
     try{
-     await KasirAuth.saveProductsAndWait(products, true);
+     products = await KasirAuth.deleteProduct(p.id);
     }catch(err){
+     products = products.filter(x=>x.id!==p.id);
      save(STORE.products,products);
     }
     render();
