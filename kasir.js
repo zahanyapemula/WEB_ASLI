@@ -216,6 +216,7 @@
     let products = load(STORE.products, []);
     let cart = [];
     let paymentMethod = 'cash';
+    let isCheckingOut = false;
 
     function setPaymentMethod(method) {
       paymentMethod = method === 'qris' ? 'qris' : 'cash';
@@ -244,7 +245,11 @@
     function findProduct(code) {
       const normalized = normalizeCode(code);
       if (!normalized) return null;
-      return products.find(product => normalizeCode(product.barcode) === normalized) || null;
+      const lower = normalized.toLowerCase();
+      return products.find(product =>
+        normalizeCode(product.barcode) === normalized ||
+        normalizeCode(product.code || product.productCode).toLowerCase() === lower
+      ) || null;
     }
 
     function getScanQty() {
@@ -264,7 +269,7 @@
 
       const product = findProduct(normalized);
       if (!product) {
-        toast('Barcode tidak ditemukan. Pastikan produk sudah dibuat di Produk.');
+        toast('Barcode/kode produk tidak ditemukan. Pastikan produk sudah dibuat di Produk.');
         return false;
       }
 
@@ -274,7 +279,11 @@
         return false;
       }
 
-      const existing = cart.find(item => item.id === product.id);
+      const existing = cart.find(item =>
+        (product.id && item.id === product.id) ||
+        (product.barcode && item.barcode === product.barcode) ||
+        (product.code && (item.code === product.code || item.productCode === product.code))
+      );
       if (existing) {
         if (existing.qty + qtyToAdd > stock) {
           toast(`Jumlah melebihi stok tersedia (sisa stok: ${Math.max(0, stock - existing.qty)}).`);
@@ -286,7 +295,11 @@
           toast(`Jumlah melebihi stok tersedia (stok: ${stock}).`);
           return false;
         }
-        cart.push({ ...product, qty: qtyToAdd });
+        cart.push({
+          ...product,
+          id: product.id || product.barcode || `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          qty: qtyToAdd
+        });
       }
 
       render();
@@ -460,11 +473,18 @@
 
     function refreshProducts() {
       products = load(STORE.products, []);
-      const validIds = new Set(products.map(product => product.id));
+      if (isCheckingOut) {
+        quick();
+        return;
+      }
+      const validIds = new Set(products.map(product => product.id).filter(Boolean));
       cart = cart
-        .filter(item => validIds.has(item.id))
+        .filter(item => !item.id || validIds.has(item.id))
         .map(item => {
-          const current = products.find(product => product.id === item.id);
+          const current = products.find(product =>
+            (item.id && product.id === item.id) ||
+            (item.barcode && product.barcode === item.barcode)
+          );
           return current ? { ...current, qty: Math.min(item.qty, Number(current.stock || 0)) } : item;
         })
         .filter(item => item.qty > 0);
@@ -545,6 +565,7 @@
       checkoutBtn.disabled = true;
       checkoutBtn.textContent = '⏳ Menyimpan Transaksi...';
 
+      let receiptWindow = null;
       try {
         const now = new Date();
         const uniqueSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -581,27 +602,18 @@
           date: sale.date,
           type: 'penjualan',
           amount: transactionTotal,
-          desc: `Penjualan [${methodLabel}] ` + cart.map(item => `${item.name} x${item.qty}`).join(', '),
+          desc: `Penjualan [${methodLabel}] ` + soldItems.map(item => `${item.name} x${item.qty}`).join(', '),
           saleId: saleId,
           paymentMethod: paymentMethod
         };
 
-        // Rekam transaksi secara atomik di Supabase (aman untuk multi-perangkat kasir bersamaan)
-        await KasirAuth.recordPosTransaction({
-          sale,
-          cash: cashEntry,
-          items: soldItems
-        });
-
-        const rows = cart.map(item =>
-          `<div style="display:flex;justify-content:space-between"><span>${esc(item.name)} x${item.qty}</span><span>${rp(item.price * item.qty)}</span></div>`
+        // Buat baris struk langsung dari soldItems agar semua produk yang dibeli tercatat lengkap
+        const rows = soldItems.map(item =>
+          `<div style="display:flex;justify-content:space-between"><span>${esc(item.name)} x${item.qty}</span><span>${rp(item.total)}</span></div>`
         ).join('');
 
-        const receiptWindow = window.open('', '_blank', 'width=430,height=650');
-        if (receiptWindow) {
-          // Jangan menaruh literal </script> di source HTML utama; struk ditulis setelah JS berjalan.
-          const receiptScript = '<' + '/script>';
-          receiptWindow.document.write(`<!doctype html><html><body style="font-family:monospace;padding:20px">
+        const receiptScript = '<' + '/script>';
+        const receiptHtml = `<!doctype html><html><body style="font-family:monospace;padding:20px">
             <h2 style="text-align:center">KASIRTOKO</h2>
             <div>${now.toLocaleString('id-ID')}</div>
             <div style="font-size:11px;color:#666">No: ${saleId}</div><hr>${rows}<hr>
@@ -611,8 +623,40 @@
             <div style="display:flex;justify-content:space-between">Kembali <span>${rp(cashReceived - transactionTotal)}</span></div>
             <hr><p style="text-align:center">Terima kasih 🙏</p>
             <script>window.onload=()=>setTimeout(()=>window.print(),200)${receiptScript}
-          </body></html>`);
+          </body></html>`;
+
+        // Buka window struk sebelum async agar tidak diblokir browser popup blocker
+        try {
+          receiptWindow = window.open('', '_blank', 'width=430,height=650');
+          if (receiptWindow) {
+            receiptWindow.document.write('<!doctype html><html><body style="font-family:sans-serif;padding:20px;text-align:center"><p>Menyiapkan struk belanja...</p></body></html>');
+          }
+        } catch (e) {
+          console.warn('Popup struk diblokir oleh browser:', e);
+        }
+
+        // Kunci refreshProducts selama proses penyimpanan transaksi berjalan
+        isCheckingOut = true;
+
+        // Rekam transaksi secara atomik di Supabase (aman untuk multi-perangkat kasir bersamaan)
+        await KasirAuth.recordPosTransaction({
+          sale,
+          cash: cashEntry,
+          items: soldItems
+        });
+
+        if (receiptWindow && !receiptWindow.closed) {
+          receiptWindow.document.open();
+          receiptWindow.document.write(receiptHtml);
           receiptWindow.document.close();
+        } else {
+          // Fallback jika popup pertama diblokir/tertutup
+          const fallbackWindow = window.open('', '_blank', 'width=430,height=650');
+          if (fallbackWindow) {
+            fallbackWindow.document.open();
+            fallbackWindow.document.write(receiptHtml);
+            fallbackWindow.document.close();
+          }
         }
 
         cart = [];
@@ -625,9 +669,13 @@
         toast('Transaksi tercatat otomatis ✅');
         $('scan').focus();
       } catch (error) {
+        if (receiptWindow && !receiptWindow.closed) {
+          receiptWindow.close();
+        }
         console.error('Transaksi gagal disimpan:', error);
         toast(`Gagal menyimpan transaksi: ${error.message}`);
       } finally {
+        isCheckingOut = false;
         checkoutBtn.textContent = '🧾 Selesaikan & Cetak Struk';
         checkoutBtn.disabled = cart.length === 0;
       }

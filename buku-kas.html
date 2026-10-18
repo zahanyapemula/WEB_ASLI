@@ -255,7 +255,9 @@ function render(){
 
   let typeLabel=e.type==="penjualan"?"Penjualan":e.type==="modal"?"Modal":e.type==="pengeluaran"?"Pengeluaran":"Pemasukan";
   let methodText=getPaymentMethodText(e);
-  rows.push(`<tr><td>${fmtDateTime(e.date)}</td><td><b>${esc(e.desc)}</b><div class="small">${e.id}</div></td><td>${typeLabel}</td><td>${methodText}</td><td class="money in">${e.type==="pengeluaran"?"—":rp(e.amount)}</td><td class="money out">${e.type==="pengeluaran"?rp(e.amount):"—"}</td><td class="money">${rp(item.balanceAfter)}</td></tr>`);
+  let methodDisplay=methodText==="QRIS"?`<span style="color:#1d4ed8;font-weight:700">QRIS</span>`:esc(methodText);
+  let descDisplay=esc(e.desc).replace(/\[QRIS\]/g,'<span style="color:#1d4ed8;font-weight:700">[QRIS]</span>');
+  rows.push(`<tr><td>${fmtDateTime(e.date)}</td><td><b>${descDisplay}</b><div class="small">${e.id}</div></td><td>${typeLabel}</td><td>${methodDisplay}</td><td class="money in">${e.type==="pengeluaran"?"—":rp(e.amount)}</td><td class="money out">${e.type==="pengeluaran"?rp(e.amount):"—"}</td><td class="money">${rp(item.balanceAfter)}</td></tr>`);
  });
 
  $("ledger").innerHTML=rows.join("");
