@@ -262,6 +262,15 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
  $("ownerPickerToggle").addEventListener("click",()=>{$("ownerSuggestions").hidden?openOwnerSuggestions():closeOwnerSuggestions()});
  $("ownerSuggestions").addEventListener("keydown",event=>{if(event.key==="Escape"){closeOwnerSuggestions();$("productOwner").focus()}});
  document.addEventListener("click",event=>{if(!event.target.closest(".owner-picker"))closeOwnerSuggestions()});
+ window.addEventListener("webpkm:data-change", event => {
+  if (!event.detail?.name || event.detail.name === 'products') {
+    owners = load(STORE.owners, []);
+    products = load(STORE.products, []);
+    renderOwnerSuggestions();
+    syncOwnerCodeFromName();
+    render();
+  }
+ });
  window.addEventListener("storage",event=>{
   if(event.key===STORE.owners||event.key===STORE.products){
     owners=load(STORE.owners,[]);
@@ -456,7 +465,17 @@ function render(){
   renderEAN13(svg,String(p.barcode),p.price);
   d.querySelector(".edit").onclick=()=>location.href="storage.html?product="+encodeURIComponent(p.id);
   d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
-  d.querySelector(".del").onclick=()=>{if(confirm("Hapus "+p.name+"?")){products=products.filter(x=>x.id!==p.id);save(STORE.products,products);render()}};
+  d.querySelector(".del").onclick=async()=>{
+   if(confirm("Hapus "+p.name+"?")){
+    products=products.filter(x=>x.id!==p.id);
+    try{
+     await KasirAuth.saveProductsAndWait(products, true);
+    }catch(err){
+     save(STORE.products,products);
+    }
+    render();
+   }
+  };
  });
 }
 $("productSearch").addEventListener("input",render);

@@ -901,6 +901,11 @@ begin
     raise exception 'Data transaksi penjualan tidak valid.';
   end if;
 
+  -- Kunci baris sales dan cash milik target_user_id untuk mencegah race condition
+  perform 1 from public.user_data
+  where user_id = target_user_id and key in ('sales', 'cash')
+  for update;
+
   -- 1. APPEND TRANSAKSI PENJUALAN SECARA ATOMIK
   insert into public.user_data (user_id, key, value, updated_at)
   values (target_user_id, 'sales', jsonb_build_array(p_sale), now())
@@ -946,6 +951,16 @@ begin
 
   -- 3. PENGURANGAN STOK PRODUK SECARA ATOMIK
   if p_items is not null and jsonb_typeof(p_items) = 'array' then
+    perform 1 from public.user_data d
+    where d.key = 'products'
+      and (
+        d.user_id = target_user_id
+        or (caller_store_code <> '' and d.user_id in (
+          select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+        ))
+      )
+    for update;
+
     update public.user_data d
     set value = (
       select jsonb_agg(
@@ -1015,9 +1030,27 @@ begin
       and (item.value ->> 'qty')::numeric > 0;
   end if;
 
-  select d.value into updated_products
+  -- Kembalikan seluruh produk toko termasuk milik UMKM dengan tag _tenantUserId
+  select coalesce(
+    jsonb_agg(
+      case
+        when d.user_id = target_user_id then prod.val
+        else prod.val || jsonb_build_object('_tenantUserId', d.user_id)
+      end
+    ),
+    '[]'::jsonb
+  ) into updated_products
   from public.user_data d
-  where d.user_id = target_user_id and d.key = 'products';
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) as prod(val)
+  where d.key = 'products'
+    and (
+      d.user_id = target_user_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    );
 
   return jsonb_build_object(
     'success', true,
@@ -1032,7 +1065,7 @@ $$;
 revoke all on function public.record_pos_transaction(jsonb, jsonb, jsonb) from public, anon;
 grant execute on function public.record_pos_transaction(jsonb, jsonb, jsonb) to authenticated;
 
--- Fungsi penggabungan array user_data yang aman dari timpa data
+-- Fungsi penggabungan array user_data yang aman dari timpa data (sales, cash, expenses)
 create or replace function public.sync_user_data_array(
   p_key text,
   p_items jsonb
@@ -1044,6 +1077,9 @@ set search_path = ''
 as $$
 declare
   caller_id uuid := (select auth.uid());
+  caller_role text;
+  caller_store_code text;
+  target_user_id uuid;
   existing_val jsonb;
   merged_val jsonb;
 begin
@@ -1055,9 +1091,27 @@ begin
     raise exception 'Key tidak didukung untuk sinkronisasi array.';
   end if;
 
+  select p.role, coalesce(p.store_code, '')
+    into caller_role, caller_store_code
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  target_user_id := caller_id;
+  if caller_role = 'cashier' and caller_store_code <> '' then
+    select p2.user_id into target_user_id
+    from public.user_profiles p2
+    where upper(p2.store_code) = upper(caller_store_code)
+      and p2.role = 'admin'
+    order by p2.created_at asc
+    limit 1;
+    if target_user_id is null then
+      target_user_id := caller_id;
+    end if;
+  end if;
+
   select value into existing_val
   from public.user_data
-  where user_id = caller_id and key = p_key
+  where user_id = target_user_id and key = p_key
   for update;
 
   if existing_val is null or jsonb_typeof(existing_val) <> 'array' then
@@ -1072,14 +1126,15 @@ begin
   from (
     select distinct on (coalesce(val ->> 'id', val ->> 'saleId', val::text)) val
     from (
-      select value as val from jsonb_array_elements(existing_val)
-      union all
       select value as val from jsonb_array_elements(case when jsonb_typeof(p_items) = 'array' then p_items else '[]'::jsonb end)
+      union all
+      select value as val from jsonb_array_elements(existing_val)
     ) combined
+    order by coalesce(val ->> 'id', val ->> 'saleId', val::text)
   ) item;
 
   insert into public.user_data (user_id, key, value, updated_at)
-  values (caller_id, p_key, merged_val, now())
+  values (target_user_id, p_key, merged_val, now())
   on conflict (user_id, key) do update
   set value = merged_val,
       updated_at = now();
@@ -1090,6 +1145,139 @@ $$;
 
 revoke all on function public.sync_user_data_array(text, jsonb) from public, anon;
 grant execute on function public.sync_user_data_array(text, jsonb) to authenticated;
+
+-- Fungsi penggabungan produk yang aman dari race condition / timpa data antar perangkat
+create or replace function public.sync_user_data_products(
+  p_products jsonb,
+  p_replace boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  caller_role text;
+  caller_store_code text;
+  target_admin_id uuid;
+  t_user_id uuid;
+  incoming_tenant_prods jsonb;
+  existing_tenant_prods jsonb;
+  merged_tenant_prods jsonb;
+  final_all_products jsonb;
+begin
+  if caller_id is null then
+    raise exception 'Silakan login terlebih dahulu.';
+  end if;
+
+  select p.role, coalesce(p.store_code, '')
+    into caller_role, caller_store_code
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  if caller_role not in ('admin', 'cashier') then
+    raise exception 'Hanya Admin atau Kasir yang dapat menyinkronkan produk toko.';
+  end if;
+
+  target_admin_id := caller_id;
+  if caller_role = 'cashier' and caller_store_code <> '' then
+    select p2.user_id into target_admin_id
+    from public.user_profiles p2
+    where upper(p2.store_code) = upper(caller_store_code)
+      and p2.role = 'admin'
+    order by p2.created_at asc
+    limit 1;
+    if target_admin_id is null then
+      target_admin_id := caller_id;
+    end if;
+  end if;
+
+  if p_products is null or jsonb_typeof(p_products) <> 'array' then
+    raise exception 'Data produk harus berupa array.';
+  end if;
+
+  -- Kunci semua baris produk toko terlebih dahulu
+  perform 1 from public.user_data d
+  where d.key = 'products'
+    and (
+      d.user_id = target_admin_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    )
+  for update;
+
+  -- Kelompokkan produk berdasarkan tenant pemilik dan simpan secara atomik
+  for t_user_id, incoming_tenant_prods in
+    select
+      coalesce(nullif(p.val ->> '_tenantUserId', '')::uuid, target_admin_id) as tenant_id,
+      jsonb_agg(p.val - '_tenantUserId') as prods
+    from jsonb_array_elements(p_products) as p(val)
+    group by coalesce(nullif(p.val ->> '_tenantUserId', '')::uuid, target_admin_id)
+  loop
+    if p_replace then
+      merged_tenant_prods := coalesce(incoming_tenant_prods, '[]'::jsonb);
+    else
+      select value into existing_tenant_prods
+      from public.user_data
+      where user_id = t_user_id and key = 'products'
+      for update;
+
+      if existing_tenant_prods is null or jsonb_typeof(existing_tenant_prods) <> 'array' then
+        existing_tenant_prods := '[]'::jsonb;
+      end if;
+
+      select coalesce(
+        jsonb_agg(item.val),
+        '[]'::jsonb
+      ) into merged_tenant_prods
+      from (
+        select distinct on (coalesce(val ->> 'id', val ->> 'code', val ->> 'barcode', val::text)) val
+        from (
+          select val from jsonb_array_elements(incoming_tenant_prods) as val
+          union all
+          select val from jsonb_array_elements(existing_tenant_prods) as val
+        ) comb
+        order by coalesce(val ->> 'id', val ->> 'code', val ->> 'barcode', val::text)
+      ) item;
+    end if;
+
+    insert into public.user_data (user_id, key, value, updated_at)
+    values (t_user_id, 'products', merged_tenant_prods, now())
+    on conflict (user_id, key) do update
+    set value = merged_tenant_prods,
+        updated_at = now();
+  end loop;
+
+  -- Ambil kembali seluruh produk toko yang telah diperbarui
+  select coalesce(
+    jsonb_agg(
+      case
+        when d.user_id = target_admin_id then prod.val
+        else prod.val || jsonb_build_object('_tenantUserId', d.user_id)
+      end
+    ),
+    '[]'::jsonb
+  ) into final_all_products
+  from public.user_data d
+  cross join lateral jsonb_array_elements(
+    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+  ) as prod(val)
+  where d.key = 'products'
+    and (
+      d.user_id = target_admin_id
+      or (caller_store_code <> '' and d.user_id in (
+        select p_sub.user_id from public.user_profiles p_sub where upper(p_sub.store_code) = upper(caller_store_code)
+      ))
+    );
+
+  return final_all_products;
+end;
+$$;
+
+revoke all on function public.sync_user_data_products(jsonb, boolean) from public, anon;
+grant execute on function public.sync_user_data_products(jsonb, boolean) to authenticated;
 
 -- Tambahkan user_data ke supabase_realtime agar perubahan data tersiar real-time ke semua perangkat kasir
 alter table public.user_data replica identity full;

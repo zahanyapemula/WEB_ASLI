@@ -53,9 +53,151 @@
     window.dispatchEvent(new CustomEvent('kasir:cloud-error', { detail: { message } }));
   };
 
+  let storeAdminUserId = null;
+  let realtimeChannel = null;
+
+  function broadcastStoreEvent(event, payload) {
+    if (realtimeChannel) {
+      try {
+        realtimeChannel.send({
+          type: 'broadcast',
+          event,
+          payload
+        });
+      } catch (err) {
+        console.warn('Realtime broadcast error:', err);
+      }
+    }
+  }
+
+  function handleIncomingTransaction({ sale, cash, products, items }) {
+    let salesChanged = false;
+    let cashChanged = false;
+    let productsChanged = false;
+
+    hydrating = true;
+    try {
+      if (sale && sale.id) {
+        const lk = localKey('sales');
+        const localSales = readLocal(lk, []);
+        if (!localSales.some(s => s.id === sale.id)) {
+          localSales.push(sale);
+          localSales.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+          originalSetItem(lk, JSON.stringify(localSales));
+          salesChanged = true;
+        }
+      }
+      if (cash && (cash.id || cash.saleId)) {
+        const lk = localKey('cash');
+        const localCash = readLocal(lk, []);
+        if (!localCash.some(c => c.id === cash.id || (c.saleId && c.saleId === cash.saleId))) {
+          localCash.push(cash);
+          localCash.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+          originalSetItem(lk, JSON.stringify(localCash));
+          cashChanged = true;
+        }
+      }
+      if (Array.isArray(products) && products.length > 0) {
+        originalSetItem(localKey('products'), JSON.stringify(products));
+        productsChanged = true;
+      } else if (Array.isArray(items) && items.length > 0) {
+        const lk = localKey('products');
+        const localProducts = readLocal(lk, []);
+        let stockDeducted = false;
+        items.forEach(sold => {
+          const prod = localProducts.find(p => p.id === sold.id || (p.barcode && p.barcode === sold.barcode));
+          if (prod) {
+            prod.stock = Math.max(0, Number(prod.stock || 0) - Number(sold.qty || 0));
+            stockDeducted = true;
+          }
+        });
+        if (stockDeducted) {
+          originalSetItem(lk, JSON.stringify(localProducts));
+          productsChanged = true;
+        }
+      }
+    } finally {
+      hydrating = false;
+    }
+
+    if (salesChanged) window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'sales' } }));
+    if (cashChanged) window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
+    if (productsChanged) window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+  }
+
+  function handleIncomingDataUpdate(key, value) {
+    if (!DATA_NAMES.includes(key) || !Array.isArray(value)) return;
+    const lk = localKey(key);
+    hydrating = true;
+    try {
+      if (['sales', 'cash', 'expenses'].includes(key)) {
+        const currentLocal = readLocal(lk, []);
+        const localArr = Array.isArray(currentLocal) ? currentLocal : [];
+        const existingIds = new Set(localArr.map(x => String(x.id || x.saleId || '')));
+        let hasNew = false;
+        for (const item of value) {
+          const id = String(item.id || item.saleId || '');
+          if (id && !existingIds.has(id)) {
+            localArr.push(item);
+            existingIds.add(id);
+            hasNew = true;
+          }
+        }
+        if (hasNew || value.length > localArr.length) {
+          localArr.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+          originalSetItem(lk, JSON.stringify(localArr));
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: key } }));
+        }
+      } else if (key === 'products') {
+        originalSetItem(lk, JSON.stringify(value));
+        window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+      }
+    } finally {
+      hydrating = false;
+    }
+  }
+
+  function handleIncomingPostgresChange(key, value, rowUserId) {
+    if (!DATA_NAMES.includes(key) || !Array.isArray(value)) return;
+    const lk = localKey(key);
+    hydrating = true;
+    try {
+      if (['sales', 'cash', 'expenses'].includes(key)) {
+        const currentLocal = readLocal(lk, []);
+        const localArr = Array.isArray(currentLocal) ? currentLocal : [];
+        const existingIds = new Set(localArr.map(x => String(x.id || x.saleId || '')));
+        let hasNew = false;
+        for (const item of value) {
+          const id = String(item.id || item.saleId || '');
+          if (id && !existingIds.has(id)) {
+            localArr.push(item);
+            existingIds.add(id);
+            hasNew = true;
+          }
+        }
+        if (hasNew || value.length > localArr.length) {
+          localArr.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+          originalSetItem(lk, JSON.stringify(localArr));
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: key } }));
+        }
+      } else if (key === 'products') {
+        const currentLocal = readLocal(lk, []);
+        const currentProducts = Array.isArray(currentLocal) ? currentLocal : [];
+        const tenantId = rowUserId || currentUser.id;
+        const remaining = currentProducts.filter(p => (p._tenantUserId || currentUser.id) !== tenantId);
+        const updated = value.map(p => ({ ...p, _tenantUserId: tenantId }));
+        const merged = [...remaining, ...updated];
+        originalSetItem(lk, JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+      }
+    } finally {
+      hydrating = false;
+    }
+  }
+
   async function saveCloud(name, value) {
     if (!client || !session?.access_token || !currentUser || hydrating) return;
-    if (['sales', 'cash'].includes(name) && Array.isArray(value)) {
+    if (['sales', 'cash', 'expenses'].includes(name) && Array.isArray(value)) {
       try {
         const { data, error } = await client.rpc('sync_user_data_array', {
           p_key: name,
@@ -68,13 +210,35 @@
           } finally {
             hydrating = false;
           }
+          broadcastStoreEvent('data_updated', { key: name, value: data });
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name } }));
           return;
         }
       } catch (err) {
-        console.warn('sync_user_data_array fallback to upsert:', err);
+        console.warn('sync_user_data_array error:', err);
       }
     }
     if (name === 'products' && ['admin', 'cashier'].includes(currentProfile?.role)) {
+      try {
+        const { data, error } = await client.rpc('sync_user_data_products', {
+          p_products: Array.isArray(value) ? value : [],
+          p_replace: false
+        });
+        if (!error && Array.isArray(data)) {
+          hydrating = true;
+          try {
+            originalSetItem(localKey('products'), JSON.stringify(data));
+          } finally {
+            hydrating = false;
+          }
+          broadcastStoreEvent('data_updated', { key: 'products', value: data });
+          window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+          return;
+        }
+      } catch (err) {
+        console.warn('sync_user_data_products error:', err);
+      }
+
       const grouped = new Map();
       for (const product of Array.isArray(value) ? value : []) {
         const tenantId = product._tenantUserId || currentUser.id;
@@ -99,6 +263,7 @@
         reportCloudError(failedSave);
         throw failedSave;
       }
+      broadcastStoreEvent('data_updated', { key: 'products', value });
       return;
     }
     const { error } = await client.from('user_data').upsert({
@@ -108,6 +273,9 @@
       updated_at: new Date().toISOString()
     }, { onConflict: 'user_id,key' });
     if (error) reportCloudError(error);
+    else {
+      broadcastStoreEvent('data_updated', { key: name, value });
+    }
   }
 
   const pendingProductSaves = new Set();
@@ -138,15 +306,20 @@
       try {
         const { data } = await client
           .from('user_profiles')
-          .select('user_id')
-          .eq('role', 'umkm')
+          .select('user_id, role')
           .ilike('store_code', storeCode);
-        for (const row of data || []) {
+        for (const row of (data || [])) {
           if (row.user_id && !ids.includes(row.user_id)) ids.push(row.user_id);
+          if (row.role === 'admin' && !storeAdminUserId) {
+            storeAdminUserId = row.user_id;
+          }
         }
       } catch (e) {
         console.warn('Gagal memuat tenant toko:', e);
       }
+    }
+    if (!storeAdminUserId && currentProfile?.role === 'admin') {
+      storeAdminUserId = currentUser.id;
     }
     return ids;
   }
@@ -156,9 +329,9 @@
     if (currentProfile?.role === 'umkm') return;
     hydrating = true;
     try {
+      const tenantIds = await getStoreTenantUserIds();
       let query = client.from('user_data').select('user_id,key,value');
       if (['admin', 'cashier'].includes(currentProfile?.role)) {
-        const tenantIds = await getStoreTenantUserIds();
         query = query.in('user_id', tenantIds);
       } else {
         query = query.eq('user_id', currentUser.id);
@@ -167,6 +340,8 @@
       if (error) throw error;
       const allProducts = [];
       loadedProductTenantIds.clear();
+      const adminId = storeAdminUserId || currentUser.id;
+
       for (const row of (data || [])) {
         if (row.key === 'products') {
           loadedProductTenantIds.add(row.user_id);
@@ -176,8 +351,14 @@
           } else if (row.user_id === currentUser.id) {
             originalSetItem(localKey('products'), JSON.stringify(products.map(product => ({ ...product, _tenantUserId: currentUser.id }))));
           }
-        } else if (DATA_NAMES.includes(row.key) && row.user_id === currentUser.id) {
-          originalSetItem(localKey(row.key), JSON.stringify(row.value ?? []));
+        } else if (DATA_NAMES.includes(row.key)) {
+          if (['admin', 'cashier'].includes(currentProfile?.role)) {
+            if (row.user_id === adminId || (row.user_id === currentUser.id && !storeAdminUserId)) {
+              originalSetItem(localKey(row.key), JSON.stringify(row.value ?? []));
+            }
+          } else if (row.user_id === currentUser.id) {
+            originalSetItem(localKey(row.key), JSON.stringify(row.value ?? []));
+          }
         }
       }
       if (['admin', 'cashier'].includes(currentProfile?.role)) {
@@ -187,7 +368,6 @@
     setupRealtimeSync();
   }
 
-  let realtimeChannel = null;
   function setupRealtimeSync() {
     if (!client || !currentUser || !session?.access_token) return;
     if (realtimeChannel) {
@@ -195,9 +375,21 @@
       realtimeChannel = null;
     }
 
-    const channelName = 'public_user_data_' + String(currentUser.id || 'pos').substring(0, 8);
+    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || 'default').trim().toLowerCase();
+    const channelName = 'store_sync_' + (storeCode || String(currentUser.id).substring(0, 8));
+
     realtimeChannel = client
-      .channel(channelName)
+      .channel(channelName, {
+        config: { broadcast: { self: false } }
+      })
+      .on('broadcast', { event: 'pos_transaction' }, payload => {
+        const { sale, cash, products, items } = payload.payload || {};
+        handleIncomingTransaction({ sale, cash, products, items });
+      })
+      .on('broadcast', { event: 'data_updated' }, payload => {
+        const { key, value } = payload.payload || {};
+        handleIncomingDataUpdate(key, value);
+      })
       .on(
         'postgres_changes',
         {
@@ -207,43 +399,9 @@
         },
         payload => {
           if (!payload.new || !payload.new.key) return;
-          const { key, value } = payload.new;
+          const { key, value, user_id } = payload.new;
           if (!DATA_NAMES.includes(key)) return;
-
-          const lk = localKey(key);
-          const currentLocal = readLocal(lk, []);
-
-          if (['sales', 'cash'].includes(key) && Array.isArray(value)) {
-            const localArr = Array.isArray(currentLocal) ? currentLocal : [];
-            const existingIds = new Set(localArr.map(x => String(x.id || x.saleId || '')));
-            let hasNew = false;
-            for (const item of value) {
-              const id = String(item.id || item.saleId || '');
-              if (id && !existingIds.has(id)) {
-                localArr.push(item);
-                existingIds.add(id);
-                hasNew = true;
-              }
-            }
-            if (hasNew || value.length > localArr.length) {
-              localArr.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-              hydrating = true;
-              try {
-                originalSetItem(lk, JSON.stringify(localArr));
-              } finally {
-                hydrating = false;
-              }
-              window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: key } }));
-            }
-          } else if (key === 'products' && Array.isArray(value)) {
-            hydrating = true;
-            try {
-              originalSetItem(lk, JSON.stringify(value));
-            } finally {
-              hydrating = false;
-            }
-            window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
-          }
+          handleIncomingPostgresChange(key, value, user_id);
         }
       )
       .subscribe((status, err) => {
@@ -277,14 +435,34 @@
     return products;
   }
 
-  async function saveProductsAndWait(products) {
+  async function saveProductsAndWait(products, replace = false) {
     await ready;
     if (!client || !session?.access_token || !currentUser || !['admin', 'cashier'].includes(currentProfile?.role)) {
       throw new Error('Hanya Owner/Kasir yang dapat menyimpan produk.');
     }
     if (!Array.isArray(products)) throw new Error('Daftar produk tidak valid.');
+    try {
+      const { data, error } = await client.rpc('sync_user_data_products', {
+        p_products: products,
+        p_replace: Boolean(replace)
+      });
+      if (!error && Array.isArray(data)) {
+        hydrating = true;
+        try {
+          originalSetItem(localKey('products'), JSON.stringify(data));
+        } finally {
+          hydrating = false;
+        }
+        broadcastStoreEvent('data_updated', { key: 'products', value: data });
+        window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+        return data;
+      }
+    } catch (err) {
+      console.warn('RPC sync_user_data_products gagal, fallback:', err);
+    }
     await saveCloud('products', products);
     originalSetItem(localKey('products'), JSON.stringify(products));
+    return products;
   }
 
   async function loadProfile(userId = currentUser?.id) {
@@ -528,6 +706,14 @@
           } finally {
             hydrating = false;
           }
+          // Siarkan transaksi ke semua perangkat kasir/admin toko yang sedang online secara real-time
+          broadcastStoreEvent('pos_transaction', {
+            sale,
+            cash,
+            products: data.products,
+            items
+          });
+
           window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'sales' } }));
           window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
           window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
@@ -559,6 +745,7 @@
       });
       originalSetItem(localKey('products'), JSON.stringify(currentProducts));
     }
+    broadcastStoreEvent('pos_transaction', { sale, cash, items });
     window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'sales' } }));
     window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
     window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));

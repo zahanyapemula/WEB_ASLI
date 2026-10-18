@@ -971,6 +971,20 @@
             document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refreshStorageData() });
             window.setInterval(() => { if (document.visibilityState === 'visible') void refreshStorageData() }, 60_000);
             function render() { const rows = $('rows'), alerts = $('alerts'), filter = $('ownerFilter').value; rows.innerHTML = ''; let low = 0; const visible = products.filter(p => !filter || String(p.ownerCode || '') === filter); const groups = new Map(); visible.forEach(p => { const key = p.ownerCode || '~~~~'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(p) });[...groups].sort((a, b) => a[0].localeCompare(b[0])).forEach(([code, items]) => { const heading = document.createElement('tr'); heading.innerHTML = `<td colspan="7"><b>${code === '~~~~' ? 'Belum diatur' : `Kode UMKM ${esc(code)} · ${esc(items[0].owner || 'Belum diatur')}`}</b></td>`; heading.style.background = 'var(--soft2)'; rows.appendChild(heading); items.forEach(p => { const isLow = Number(p.stock || 0) <= Number(p.reorder || 0); if (isLow) low++; const tr = document.createElement('tr'); const actionBtns = isUmkm ? `<button class="btn secondary edit-stock">Input Ingredient</button>` : `<button class="btn secondary edit-stock">Edit</button>`; tr.innerHTML = `<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code || p.productCode || '')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode || '----')}<div class="small">${esc(p.owner || 'Belum diatur')}</div></td><td><span class="stock-num ${isLow ? 'stock-low' : ''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow ? 'warn' : 'good'}">${isLow ? 'Perlu Restok' : 'Aman'}</span></td><td>${p.ingredients?.length ? esc(formatIngredients(p.ingredients)) : '<span class="small">Belum diisi</span>'}</td><td>${actionBtns}</td>`; tr.querySelector('.edit-stock').onclick = () => { selectedId = p.id; $('product').value = p.id; loadForm(); if (isUmkm) $('ingredients').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }) }; rows.appendChild(tr) }) }); $('empty').style.display = visible.length ? 'none' : 'block'; $('lowTag').textContent = `${low} stok rendah`; alerts.innerHTML = low ? `<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>` : '' }
+            window.addEventListener('webpkm:data-change', async event => {
+                if (!event.detail?.name || event.detail.name === 'products') {
+                    if (!storageFormDirty) {
+                        if (isUmkm) {
+                            try { products = await KasirAuth.listOwnerStorageProducts(); }
+                            catch (error) { console.error('Pembaruan produk titipan gagal:', error); }
+                        } else {
+                            products = load(STORE.products, []); owners = load(STORE.owners, []); products = products.map(normalize);
+                        }
+                        if (!products.some(product => product.id === selectedId)) selectedId = products[0]?.id || '';
+                        populateOwners(); populate(); populateOwnerFilter(); render();
+                    }
+                }
+            });
             window.addEventListener('storage', async () => {
                 if (isUmkm) {
                     try { products = await KasirAuth.listOwnerStorageProducts() }
