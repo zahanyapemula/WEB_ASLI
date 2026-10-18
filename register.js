@@ -101,8 +101,8 @@
       }
 
       status.textContent = 'Akun UMKM berhasil dibuat. Membuka storage produk...';
-      const toUrl = window.resolvePageUrl || KasirAuth?.pageUrl || (p => p);
-      setTimeout(() => { location.href = toUrl('storage.html'); }, 500);
+      status.classList.add('success');
+      setTimeout(() => { location.href = 'storage.html'; }, 500);
 
     } catch (err) {
       const raw = String(err?.message || err || '');

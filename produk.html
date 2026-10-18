@@ -461,10 +461,8 @@ function render(){
   <div class="actions"><button class="btn secondary edit">⚙️ Storage</button><button class="btn secondary copy">📋 Salin</button><button class="btn danger del">🗑️ Hapus</button></div>`;
   $("list").appendChild(d);
   const svg=d.querySelector("svg");
-  d.querySelector(".edit").onclick=()=>{
-    const toUrl = window.resolvePageUrl || KasirAuth?.pageUrl || (p => p);
-    location.href = toUrl("storage.html?product=" + encodeURIComponent(p.id));
-  };
+  renderEAN13(svg,String(p.barcode),p.price);
+  d.querySelector(".edit").onclick=()=>location.href="storage.html?product="+encodeURIComponent(p.id);
   d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
   d.querySelector(".del").onclick=async()=>{
    if(confirm("Hapus "+p.name+"?")){

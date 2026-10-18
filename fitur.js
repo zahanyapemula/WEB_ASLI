@@ -1,7 +1,5 @@
 (() => {
   // Navbar ditangani oleh shared-navbar.js agar konsisten di semua halaman.
-  const toUrl = page => (window.resolvePageUrl || window.KasirAuth?.pageUrl || (p => p))(page);
-
   document.querySelectorAll('.tool-card[data-page]').forEach(card => {
     card.setAttribute('tabindex', '0');
     card.setAttribute('role', 'button');
@@ -12,14 +10,14 @@
         await window.KasirAuth?.ready;
         if (!window.KasirAuth?.current()) {
           sessionStorage.setItem('kasirTokoAfterLogin', page);
-          window.location.href = toUrl('login.html');
+          window.location.href = 'login.html';
           return;
         }
-        window.location.href = toUrl(page);
+        window.location.href = page;
       } catch (error) {
         console.error('Auth:', error);
         sessionStorage.setItem('kasirTokoAfterLogin', page);
-        window.location.href = toUrl('login.html');
+        window.location.href = 'login.html';
       }
     };
     card.addEventListener('click', open);
@@ -44,13 +42,13 @@
       await window.KasirAuth?.ready;
       if (!window.KasirAuth?.current()) {
         sessionStorage.setItem('kasirTokoAfterLogin', page);
-        window.location.href = toUrl('login.html');
+        window.location.href = 'login.html';
         return;
       }
-      window.location.href = toUrl(page);
+      window.location.href = page;
     } catch (error) {
       console.error('Auth:', error);
-      window.location.href = toUrl(page);
+      window.location.href = page;
     }
   };
 })();

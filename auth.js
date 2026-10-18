@@ -8,43 +8,7 @@
   const LOGIN_KEY = 'kasirTokoLoggedIn';
   const publicPages = ['index.html', 'login.html', 'register.html', 'register-toko.html', 'panduan.html', 'tentang.html', 'kontak.html', 'reset-password.html', ''];
   const protectedPages = ['dashboard.html', 'kasir.html', 'produk.html', 'storage.html', 'buku-kas.html', 'perbandingan.html', 'scan-ingredient.html'];
-
-  const getBaseUrl = () => {
-    const p = location.pathname.toLowerCase();
-    if (p.startsWith('/web_asli/') || p === '/web_asli') {
-      return '/WEB_ASLI/';
-    }
-    return '/';
-  };
-
-  const resolvePageUrl = (pageWithQuery) => {
-    if (!pageWithQuery) return getBaseUrl();
-    if (/^(https?:|\/\/|#|mailto:|tel:)/i.test(pageWithQuery)) return pageWithQuery;
-    const [pathPart, ...rest] = pageWithQuery.split('?');
-    const queryPart = rest.length ? '?' + rest.join('?') : '';
-    const [cleanPath, hash] = pathPart.split('#');
-    const hashPart = hash !== undefined ? '#' + hash : '';
-
-    let cleanName = cleanPath.replace(/\.html$/i, '');
-    cleanName = cleanName.replace(/^\.?\//, '');
-
-    if (cleanName === 'index' || cleanName === '') {
-      return `${getBaseUrl()}${queryPart}${hashPart}`;
-    }
-    return `${getBaseUrl()}${cleanName}${queryPart}${hashPart}`;
-  };
-
-  window.resolvePageUrl = resolvePageUrl;
-
-  const getNormalizedPage = () => {
-    const parts = location.pathname.split('/').filter(Boolean);
-    if (!parts.length) return 'index.html';
-    let last = parts[parts.length - 1].toLowerCase();
-    if (last === 'web_asli') return 'index.html';
-    if (!last.endsWith('.html')) last += '.html';
-    return last;
-  };
-  const file = getNormalizedPage();
+  const file = (location.pathname.split('/').pop() || '').toLowerCase();
   let hydrating = false;
   let session = null;
   let currentUser = null;
@@ -1299,14 +1263,14 @@
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(CURRENT_KEY);
     localStorage.removeItem(LOGIN_KEY);
-    location.href = resolvePageUrl('login.html');
+    location.href = 'login.html';
   }
 
   async function requireAuth() {
     await ready;
     if (!current()) {
       sessionStorage.setItem('kasirTokoAfterLogin', file + location.search);
-      location.replace(resolvePageUrl('login.html'));
+      location.replace('login.html');
       return false;
     }
     return true;
@@ -1342,7 +1306,6 @@
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
     listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients,
     recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, deleteProduct, ready,
-    pageUrl: resolvePageUrl, baseUrl: getBaseUrl,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },
@@ -1380,19 +1343,19 @@
     const user = current();
     if (protectedPages.includes(file) && !user) {
       sessionStorage.setItem('kasirTokoAfterLogin', file + location.search);
-      location.replace(resolvePageUrl('login.html'));
+      location.replace('login.html');
       return;
     }
     if (user && currentProfile?.role === 'umkm' && protectedPages.includes(file) && file !== 'storage.html') {
-      location.replace(resolvePageUrl('storage.html'));
+      location.replace('storage.html');
       return;
     }
     if (user && currentProfile?.role === 'umkm' && file === 'fitur.html') {
-      location.replace(resolvePageUrl('storage.html'));
+      location.replace('storage.html');
       return;
     }
     if (user && file === 'login.html') {
-      location.replace(resolvePageUrl(currentProfile?.role === 'umkm' ? 'storage.html' : 'fitur.html'));
+      location.replace(currentProfile?.role === 'umkm' ? 'storage.html' : 'fitur.html');
       return;
     }
     if (user && currentProfile?.role === 'umkm') {
@@ -1401,9 +1364,9 @@
         if (protectedPages.includes(targetPage) && targetPage !== 'storage.html') link.hidden = true;
       });
       const nav = document.getElementById('siteNav');
-      if (nav && !nav.querySelector('a[href*="storage"]')) {
+      if (nav && !nav.querySelector('a[href="storage.html"]')) {
         const storageLink = document.createElement('a');
-        storageLink.href = resolvePageUrl('storage.html');
+        storageLink.href = 'storage.html';
         storageLink.textContent = 'Storage Produk';
         nav.insertBefore(storageLink, nav.querySelector('.site-account') || null);
       }

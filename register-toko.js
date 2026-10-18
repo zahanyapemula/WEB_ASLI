@@ -129,8 +129,7 @@
 
       status.textContent = `Toko berhasil didaftarkan! Kode Toko Anda: ${generatedStoreCode}. Membuka fitur...`;
       status.classList.add('success');
-      const toUrl = window.resolvePageUrl || KasirAuth?.pageUrl || (p => p);
-      setTimeout(() => { location.href = toUrl('fitur.html'); }, 500);
+      setTimeout(() => { location.href = 'fitur.html'; }, 500);
 
     } catch (err) {
       const message = friendlyError(err);
