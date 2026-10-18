@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages (Clean URLs)
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build clean URL structure
+        run: |
+          mkdir -p _site
+          
+          # Copy semua file non-HTML langsung (js, css, gambar, dll)
+          rsync -av --exclude='*.html' --exclude='.git' --exclude='.github' --exclude='_site' . _site/
+          
+          # Copy index.html langsung
+          if [ -f index.html ]; then
+            cp index.html _site/index.html
+          fi
+          
+          # Setiap file .html (selain index.html) → jadi folder/index.html
+          for file in *.html; do
+            if [ "$file" != "index.html" ]; then
+              name="${file%.html}"
+              mkdir -p "_site/$name"
+              cp "$file" "_site/$name/index.html"
+              echo "✅ $file → $name/index.html"
+            fi
+          done
+          
+          # Fix semua path script/link di dalam _site agar pakai ../
+          # (karena sekarang file ada di subfolder)
+          for file in _site/*/index.html; do
+            if [ -f "$file" ]; then
+              # Fix src dan href yang tidak dimulai dengan http, /, atau ..
+              sed -i 's|src="\([^/h\.][^"]*\)"|src="../\1"|g' "$file"
+              sed -i 's|href="\([^/h#\.][^"]*\.css\)"|href="../\1"|g' "$file"
+              echo "🔧 Fixed paths in $file"
+            fi
+          done
+          
+          echo "📁 Struktur _site:"
+          find _site -type f | head -50
+
+      - name: Deploy ke GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
