@@ -35,10 +35,11 @@
       const requestedTarget = sessionStorage.getItem('kasirTokoAfterLogin') || 'fitur.html';
       const target = KasirAuth.isUmkm
         ? 'storage.html'
-        : (/^[a-z0-9-]+\.html(?:\?[a-z0-9=&_%.-]*)?$/i.test(requestedTarget) ? requestedTarget : 'fitur.html');
+        : (/^[a-z0-9-]+(?:\.html)?(?:\?[a-z0-9=&_%.-]*)?$/i.test(requestedTarget) ? requestedTarget : 'fitur.html');
       sessionStorage.removeItem('kasirTokoAfterLogin');
       showStatus('Login berhasil.', true);
-      setTimeout(() => { location.href = target; }, 400);
+      const toUrl = window.resolvePageUrl || KasirAuth?.pageUrl || (p => p);
+      setTimeout(() => { location.href = toUrl(target); }, 400);
     }
     catch (err) { showStatus(friendlyError(err)); button.disabled = false; button.textContent = 'Login'; }
   });

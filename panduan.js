@@ -5,7 +5,10 @@
     readButton.addEventListener('click', () => {
       const target = document.querySelector('#panduan-detail, .guide-section');
       if (target) target.scrollIntoView({ behavior: 'smooth' });
-      else window.location.href = 'panduan.html';
+      else {
+        const toUrl = window.resolvePageUrl || KasirAuth?.pageUrl || (p => p);
+        window.location.href = toUrl('panduan.html');
+      }
     });
   }
 })();
