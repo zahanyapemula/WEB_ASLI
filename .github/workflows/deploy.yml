@@ -16,41 +16,122 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Build clean URL structure
+      - name: Build clean URL structure with Python
         run: |
-          mkdir -p _site
-          
-          # Copy semua file non-HTML langsung (js, css, gambar, dll)
-          rsync -av --exclude='*.html' --exclude='.git' --exclude='.github' --exclude='_site' . _site/
-          
-          # Copy index.html langsung
-          if [ -f index.html ]; then
-            cp index.html _site/index.html
-          fi
-          
-          # Setiap file .html (selain index.html) → jadi folder/index.html
-          for file in *.html; do
-            if [ "$file" != "index.html" ]; then
-              name="${file%.html}"
-              mkdir -p "_site/$name"
-              cp "$file" "_site/$name/index.html"
-              echo "✅ $file → $name/index.html"
-            fi
-          done
-          
-          # Fix semua path script/link di dalam _site agar pakai ../
-          # (karena sekarang file ada di subfolder)
-          for file in _site/*/index.html; do
-            if [ -f "$file" ]; then
-              # Fix src dan href yang tidak dimulai dengan http, /, atau ..
-              sed -i 's|src="\([^/h\.][^"]*\)"|src="../\1"|g' "$file"
-              sed -i 's|href="\([^/h#\.][^"]*\.css\)"|href="../\1"|g' "$file"
-              echo "🔧 Fixed paths in $file"
-            fi
-          done
-          
-          echo "📁 Struktur _site:"
-          find _site -type f | head -50
+          python3 << 'EOF'
+          import os
+          import re
+          import shutil
+
+          SRC = "."
+          DEST = "_site"
+          BASE = "/WEB_ASLI"
+
+          # Kumpulkan semua nama halaman HTML (selain index.html)
+          html_pages = set()
+          for f in os.listdir(SRC):
+              if f.endswith(".html") and f != "index.html":
+                  html_pages.add(f[:-5])  # simpan tanpa .html, e.g. "fitur", "buku-kas"
+
+          print(f"Halaman ditemukan: {html_pages}")
+
+          # Bersihkan dan buat folder _site
+          if os.path.exists(DEST):
+              shutil.rmtree(DEST)
+          os.makedirs(DEST)
+
+          # Copy semua file NON-html ke _site (js, css, gambar, dll)
+          for item in os.listdir(SRC):
+              if item.startswith(".") or item == "_site" or item.endswith(".html"):
+                  continue
+              src_path = os.path.join(SRC, item)
+              dst_path = os.path.join(DEST, item)
+              if os.path.isdir(src_path):
+                  shutil.copytree(src_path, dst_path)
+              else:
+                  shutil.copy2(src_path, dst_path)
+              print(f"Copy: {item}")
+
+          def fix_links(content, is_subpage):
+              """
+              Ganti semua href="page.html" dan src="file.js" dengan path yang benar.
+              is_subpage=True  → file ada di subfolder (fitur/index.html)
+              is_subpage=False → file ada di root (index.html)
+              """
+              prefix = "../" if is_subpage else ""
+
+              def replace_href(m):
+                  quote = m.group(1)
+                  url = m.group(2)
+                  # Skip: http, https, #, mailto, tel, absolute /
+                  if re.match(r'^(https?://|#|mailto:|tel:|/)', url):
+                      return m.group(0)
+                  # Kalau link ke halaman HTML yang ada → clean URL
+                  name = url[:-5] if url.endswith(".html") else None
+                  if name and name in html_pages:
+                      new_url = f"{prefix}{name}/" if is_subpage else f"{name}/"
+                      return f'href={quote}{new_url}{quote}'
+                  # Kalau link ke asset (js, css, gambar) dari subfolder
+                  if is_subpage and not url.startswith("../") and not url.startswith("/"):
+                      return f'href={quote}../{url}{quote}'
+                  return m.group(0)
+
+              def replace_src(m):
+                  quote = m.group(1)
+                  url = m.group(2)
+                  if re.match(r'^(https?://|//|/)', url):
+                      return m.group(0)
+                  if is_subpage and not url.startswith("../"):
+                      return f'src={quote}../{url}{quote}'
+                  return m.group(0)
+
+              def replace_action(m):
+                  quote = m.group(1)
+                  url = m.group(2)
+                  if re.match(r'^(https?://|#|/)', url):
+                      return m.group(0)
+                  name = url[:-5] if url.endswith(".html") else None
+                  if name and name in html_pages:
+                      new_url = f"{prefix}{name}/" if is_subpage else f"{name}/"
+                      return f'action={quote}{new_url}{quote}'
+                  return m.group(0)
+
+              content = re.sub(r'href=(["\'])([^"\']+)\1', replace_href, content)
+              content = re.sub(r'src=(["\'])([^"\']+)\1', replace_src, content)
+              content = re.sub(r'action=(["\'])([^"\']+)\1', replace_action, content)
+              return content
+
+          # Proses index.html root
+          if os.path.exists("index.html"):
+              with open("index.html", "r", encoding="utf-8") as f:
+                  content = f.read()
+              content = fix_links(content, is_subpage=False)
+              with open(os.path.join(DEST, "index.html"), "w", encoding="utf-8") as f:
+                  f.write(content)
+              print("✅ index.html → _site/index.html")
+
+          # Proses setiap page.html → _site/page/index.html
+          for page in html_pages:
+              src_file = f"{page}.html"
+              dst_dir = os.path.join(DEST, page)
+              dst_file = os.path.join(dst_dir, "index.html")
+              os.makedirs(dst_dir, exist_ok=True)
+              with open(src_file, "r", encoding="utf-8") as f:
+                  content = f.read()
+              content = fix_links(content, is_subpage=True)
+              with open(dst_file, "w", encoding="utf-8") as f:
+                  f.write(content)
+              print(f"✅ {src_file} → {dst_file}")
+
+          print("\n📁 Struktur _site:")
+          for root, dirs, files in os.walk(DEST):
+              dirs[:] = [d for d in dirs if not d.startswith('.')]
+              level = root.replace(DEST, '').count(os.sep)
+              indent = ' ' * 2 * level
+              print(f'{indent}{os.path.basename(root)}/')
+              for file in files:
+                  print(f'{indent}  {file}')
+          EOF
 
       - name: Deploy ke GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
