@@ -812,11 +812,7 @@
                     ownerAccounts = await KasirAuth.listOwnerAccounts();
                     const serverProds = await KasirAuth.refreshInventoryProducts();
                     if (Array.isArray(serverProds)) {
-                        const mergedMap = new Map();
-                        products.forEach(item => mergedMap.set(item.id, item));
-                        serverProds.forEach(item => mergedMap.set(item.id, item));
-                        products = [...mergedMap.values()];
-                        save(STORE.products, products);
+                        products = sortProducts(serverProds.map(normalize));
                     }
                 }
                 catch (error) { console.error('Daftar akun owner/produk gagal dimuat:', error); }
@@ -833,6 +829,22 @@
             }
             function syncOwnersFromProducts() {
                 let changed = false;
+                const validCodes = new Set([
+                    ...products.map(p => String(p.ownerCode || '')).filter(Boolean),
+                    ...ownerAccounts.map(a => String(a.owner_code || '')).filter(Boolean)
+                ]);
+                const validNames = new Set([
+                    ...products.map(p => cleanOwner(p.owner).toLowerCase()).filter(Boolean),
+                    ...ownerAccounts.map(a => cleanOwner(a.owner_name).toLowerCase()).filter(Boolean)
+                ]);
+                const initialLen = owners.length;
+                owners = owners.filter(o => {
+                    const c = String(o.code || o.ownerCode || '');
+                    const n = cleanOwner(o.name).toLowerCase();
+                    return (c && validCodes.has(c)) || (n && validNames.has(n));
+                });
+                if (owners.length !== initialLen) changed = true;
+
                 products.forEach(p => {
                     if (p.owner && p.ownerCode) {
                         const clean = cleanOwner(p.owner);
@@ -873,10 +885,51 @@
             function parseIngredients(text) { return String(text || '').split(/[\n,]+/).map(v => v.trim()).filter(Boolean).map(item => { let m = item.match(/^(.+?)\s*[:\-]\s*(.+)$/); if (!m) m = item.match(/^(.+?)\s+(\d+(?:[.,]\d+)?\s*(?:g|kg|ml|l|pcs|buah|sdm|sdt|%|unit)?)$/i); return m ? { name: m[1].trim(), qty: m[2].trim() } : { name: item, qty: '' } }) }
             function formatIngredients(list) { return (list || []).map(i => i.qty ? `${i.name}: ${i.qty}` : i.name).join(', ') }
             function loadForm() { const p = products.find(x => x.id === selectedId); if (!p) return; $('owner').value = p.owner || ''; $('ownerCode').value = p.ownerCode || ''; $('stock').value = p.stock ?? 0; $('reorder').value = p.reorder ?? 3; $('ingredients').value = formatIngredients(p.ingredients) }
-            function populate() { const s = $('product'); const sorted = sortProducts(products); s.innerHTML = sorted.map(p => `<option value="${esc(p.id)}">${esc(p.code || p.productCode || '----')} · ${esc(p.name)}</option>`).join(''); if (!products.length) { s.innerHTML = '<option value="">Belum ada produk</option>'; $('owner').value = ''; $('ownerCode').value = ''; $('stock').value = ''; $('reorder').value = '3'; $('ingredients').value = ''; return } if (!selectedId || !products.some(p => p.id === selectedId)) selectedId = sorted[0].id; s.value = selectedId; loadForm() }
-            function populateOwners() { const select = $('owner'), selected = select.value, names = new Map(); ownerAccounts.forEach(account => { const name = cleanOwner(account.owner_name); if (name) names.set(name.toLowerCase(), { name, code: account.owner_code || '' }) }); owners.forEach(owner => { const name = cleanOwner(owner.name); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: owner.code || '' }) }); products.forEach(product => { const name = cleanOwner(product.owner); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: product.ownerCode || '' }) }); if (KasirAuth.isUmkm && KasirAuth.profile?.owner_name) { const name = cleanOwner(KasirAuth.profile.owner_name); names.set(name.toLowerCase(), { name, code: KasirAuth.profile.owner_code || '' }) } select.innerHTML = '<option value="">Belum diatur</option>' + [...names.values()].sort((a, b) => String(a.code || '').localeCompare(String(b.code || ''))).map(owner => `<option value="${esc(owner.name)}">${esc(owner.code || '----')} · ${esc(owner.name)}</option>`).join(''); if ([...select.options].some(option => option.value === selected)) select.value = selected; if (KasirAuth.isUmkm) { select.value = KasirAuth.profile?.owner_name || ''; select.disabled = true } }
+            let _lastProductSelectHash = '';
+            function populate() {
+                const s = $('product');
+                const sorted = sortProducts(products);
+                const hash = sorted.map(p => `${p.id}:${p.code || ''}:${p.name || ''}`).join(';');
+                if (hash === _lastProductSelectHash && s.value === selectedId) {
+                    return;
+                }
+                _lastProductSelectHash = hash;
+                s.innerHTML = sorted.map(p => `<option value="${esc(p.id)}">${esc(p.code || p.productCode || '----')} · ${esc(p.name)}</option>`).join('');
+                if (!products.length) {
+                    s.innerHTML = '<option value="">Belum ada produk</option>';
+                    $('owner').value = ''; $('ownerCode').value = ''; $('stock').value = ''; $('reorder').value = '3'; $('ingredients').value = '';
+                    return;
+                }
+                if (!selectedId || !products.some(p => p.id === selectedId)) selectedId = sorted[0].id;
+                s.value = selectedId;
+                loadForm();
+            }
+            let _lastOwnerSelectHash = '';
+            function populateOwners() {
+                const select = $('owner'), selected = select.value, names = new Map();
+                ownerAccounts.forEach(account => { const name = cleanOwner(account.owner_name); if (name) names.set(name.toLowerCase(), { name, code: account.owner_code || '' }) });
+                owners.forEach(owner => { const name = cleanOwner(owner.name); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: owner.code || '' }) });
+                products.forEach(product => { const name = cleanOwner(product.owner); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: product.ownerCode || '' }) });
+                if (KasirAuth.isUmkm && KasirAuth.profile?.owner_name) { const name = cleanOwner(KasirAuth.profile.owner_name); names.set(name.toLowerCase(), { name, code: KasirAuth.profile.owner_code || '' }) }
+                const sorted = [...names.values()].sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+                const hash = sorted.map(o => `${o.code}=${o.name}`).join(';');
+                if (hash === _lastOwnerSelectHash && select.value === selected) return;
+                _lastOwnerSelectHash = hash;
+                select.innerHTML = '<option value="">Belum diatur</option>' + sorted.map(owner => `<option value="${esc(owner.name)}">${esc(owner.code || '----')} · ${esc(owner.name)}</option>`).join('');
+                if ([...select.options].some(option => option.value === selected)) select.value = selected;
+                if (KasirAuth.isUmkm) { select.value = KasirAuth.profile?.owner_name || ''; select.disabled = true }
+            }
             let _lastOwnerFilterHash = '';
-            function populateOwnerFilter() { const select = $('ownerFilter'), selected = select.value; const groups = new Map(); products.forEach(p => { const code = p.ownerCode || '~~~~'; const label = p.owner ? `${p.ownerCode || '----'} · ${p.owner}` : 'Belum diatur'; groups.set(code, label) }); const newHash = [...groups].map(([c,l])=>c+'='+l).sort().join('\x00'); if (newHash === _lastOwnerFilterHash) return; _lastOwnerFilterHash = newHash; select.innerHTML = '<option value="">Semua Owner</option>' + [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`).join(''); if ([...select.options].some(o => o.value === selected)) select.value = selected }
+            function populateOwnerFilter() {
+                const select = $('ownerFilter'), selected = select.value;
+                const groups = new Map();
+                products.forEach(p => { const code = p.ownerCode || '~~~~'; const label = p.owner ? `${p.ownerCode || '----'} · ${p.owner}` : 'Belum diatur'; groups.set(code, label) });
+                const newHash = [...groups].map(([c,l])=>c+'='+l).sort().join('\x00');
+                if (newHash === _lastOwnerFilterHash) return;
+                _lastOwnerFilterHash = newHash;
+                select.innerHTML = '<option value="">Semua Owner</option>' + [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`).join('');
+                if ([...select.options].some(o => o.value === selected)) select.value = selected;
+            }
             $('product').addEventListener('change', e => { selectedId = e.target.value; storageFormDirty = false; loadForm() });
             $('claimOwnerCodeButton').addEventListener('click', async () => {
                 const code = $('claimOwnerCode').value.trim();
@@ -1020,12 +1073,8 @@
                     if (isUmkm) products = sortProducts(await KasirAuth.listOwnerStorageProducts());
                     else {
                         const serverProds = await KasirAuth.refreshInventoryProducts();
-                        if (Array.isArray(serverProds) && serverProds.length > 0) {
-                            const mergedMap = new Map();
-                            serverProds.forEach(item => mergedMap.set(item.id, item));
-                            products.forEach(item => mergedMap.set(item.id, item));
-                            products = sortProducts([...mergedMap.values()].map(normalize));
-                            save(STORE.products, products);
+                        if (Array.isArray(serverProds)) {
+                            products = sortProducts(serverProds.map(normalize));
                         }
                     }
                     syncOwnersFromProducts();
@@ -1043,7 +1092,55 @@
             window.addEventListener('focus', refreshStorageData);
             document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refreshStorageData() });
             window.setInterval(() => { if (document.visibilityState === 'visible') void refreshStorageData() }, 15_000);
-            function render() { const rows = $('rows'), alerts = $('alerts'), filter = $('ownerFilter').value; rows.innerHTML = ''; let low = 0; let visible = products.filter(p => !filter || String(p.ownerCode || '') === filter); if (isUmkm && KasirAuth.profile?.owner_code) { const myCode = String(KasirAuth.profile.owner_code); visible = visible.filter(p => String(p.ownerCode || '') === myCode); } const groups = new Map(); visible.forEach(p => { const key = p.ownerCode || '~~~~'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(p) });[...groups].sort((a, b) => a[0].localeCompare(b[0])).forEach(([code, items]) => { items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'id')); const heading = document.createElement('tr'); heading.innerHTML = `<td colspan="7"><b>${code === '~~~~' ? 'Belum diatur' : `Kode UMKM ${esc(code)} · ${esc(items[0].owner || 'Belum diatur')}`}</b></td>`; heading.style.background = 'var(--soft2)'; rows.appendChild(heading); items.forEach(p => { const isLow = Number(p.stock || 0) <= Number(p.reorder || 0); if (isLow) low++; const tr = document.createElement('tr'); const actionBtns = isUmkm ? `<button class="btn secondary edit-stock">Input Ingredient</button>` : `<button class="btn secondary edit-stock">Edit</button>`; tr.innerHTML = `<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code || p.productCode || '')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode || '----')}<div class="small">${esc(p.owner || 'Belum diatur')}</div></td><td><span class="stock-num ${isLow ? 'stock-low' : ''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow ? 'warn' : 'good'}">${isLow ? 'Perlu Restok' : 'Aman'}</span></td><td>${p.ingredients?.length ? esc(formatIngredients(p.ingredients)) : '<span class="small">Belum diisi</span>'}</td><td>${actionBtns}</td>`; tr.querySelector('.edit-stock').onclick = () => { selectedId = p.id; $('product').value = p.id; storageFormDirty = false; loadForm(); if (isUmkm) $('ingredients').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }) }; rows.appendChild(tr) }) }); $('empty').style.display = visible.length ? 'none' : 'block'; $('lowTag').textContent = `${low} stok rendah`; alerts.innerHTML = low ? `<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>` : '' }
+            let _lastStorageTableHash = '';
+            function render() {
+                const rows = $('rows'), alerts = $('alerts'), filter = $('ownerFilter').value;
+                let low = 0;
+                let visible = products.filter(p => !filter || String(p.ownerCode || '') === filter);
+                if (isUmkm && KasirAuth.profile?.owner_code) {
+                    const myCode = String(KasirAuth.profile.owner_code);
+                    visible = visible.filter(p => String(p.ownerCode || '') === myCode);
+                }
+                const tableHash = filter + '|' + visible.map(p => `${p.id}:${p.stock}:${p.reorder}:${p.ownerCode}:${p.ingredients?.length}`).join(';');
+                if (tableHash === _lastStorageTableHash) {
+                    return;
+                }
+                _lastStorageTableHash = tableHash;
+
+                rows.innerHTML = '';
+                const groups = new Map();
+                visible.forEach(p => {
+                    const key = p.ownerCode || '~~~~';
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key).push(p);
+                });
+                [...groups].sort((a, b) => a[0].localeCompare(b[0])).forEach(([code, items]) => {
+                    items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'id'));
+                    const heading = document.createElement('tr');
+                    heading.innerHTML = `<td colspan="7"><b>${code === '~~~~' ? 'Belum diatur' : `Kode UMKM ${esc(code)} · ${esc(items[0].owner || 'Belum diatur')}`}</b></td>`;
+                    heading.style.background = 'var(--soft2)';
+                    rows.appendChild(heading);
+                    items.forEach(p => {
+                        const isLow = Number(p.stock || 0) <= Number(p.reorder || 0);
+                        if (isLow) low++;
+                        const tr = document.createElement('tr');
+                        const actionBtns = isUmkm ? `<button class="btn secondary edit-stock">Input Ingredient</button>` : `<button class="btn secondary edit-stock">Edit</button>`;
+                        tr.innerHTML = `<td><b>${esc(p.name)}</b><div class="small">Kode Produk: <strong>${esc(p.code || p.productCode || '')}</strong></div><div class="small">Barcode: ${esc(p.barcode)}</div></td><td>Kode UMKM: ${esc(p.ownerCode || '----')}<div class="small">${esc(p.owner || 'Belum diatur')}</div></td><td><span class="stock-num ${isLow ? 'stock-low' : ''}">${p.stock}</span></td><td>${p.reorder}</td><td><span class="badge ${isLow ? 'warn' : 'good'}">${isLow ? 'Perlu Restok' : 'Aman'}</span></td><td>${p.ingredients?.length ? esc(formatIngredients(p.ingredients)) : '<span class="small">Belum diisi</span>'}</td><td>${actionBtns}</td>`;
+                        tr.querySelector('.edit-stock').onclick = () => {
+                            selectedId = p.id;
+                            $('product').value = p.id;
+                            storageFormDirty = false;
+                            loadForm();
+                            if (isUmkm) $('ingredients').focus();
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        };
+                        rows.appendChild(tr);
+                    });
+                });
+                $('empty').style.display = visible.length ? 'none' : 'block';
+                $('lowTag').textContent = `${low} stok rendah`;
+                alerts.innerHTML = low ? `<div class="alert">⚠️ <span><b>${low} produk</b> berada di bawah atau sama dengan batas minimum stok.</span></div>` : '';
+            }
             window.addEventListener('webpkm:data-change', async event => {
                 if (!event.detail?.name || event.detail.name === 'products') {
                     if (isUmkm) {

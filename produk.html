@@ -156,11 +156,7 @@ try {
   ownerAccounts=await KasirAuth.listOwnerAccounts();
   const serverProds = await KasirAuth.refreshInventoryProducts();
   if (Array.isArray(serverProds)) {
-    const mergedMap = new Map();
-    products.forEach(item => mergedMap.set(item.id, item));
-    serverProds.forEach(item => mergedMap.set(item.id, item));
-    products = [...mergedMap.values()];
-    save(STORE.products, products);
+    products = serverProds;
   }
 }
 catch(error) {
@@ -169,6 +165,22 @@ catch(error) {
 }
 function syncOwnersFromProducts() {
   let changed = false;
+  const validCodes = new Set([
+    ...products.map(p => String(p.ownerCode || '')).filter(Boolean),
+    ...ownerAccounts.map(a => String(a.owner_code || '')).filter(Boolean)
+  ]);
+  const validNames = new Set([
+    ...products.map(p => cleanOwner(p.owner).toLowerCase()).filter(Boolean),
+    ...ownerAccounts.map(a => cleanOwner(a.owner_name).toLowerCase()).filter(Boolean)
+  ]);
+  const initialLen = owners.length;
+  owners = owners.filter(o => {
+    const c = String(o.code || o.ownerCode || '');
+    const n = cleanOwner(o.name).toLowerCase();
+    return (c && validCodes.has(c)) || (n && validNames.has(n));
+  });
+  if (owners.length !== initialLen) changed = true;
+
   products.forEach(p => {
     if (p.owner && p.ownerCode) {
       const clean = cleanOwner(p.owner);
@@ -322,11 +334,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
    try {
      const serverProds = await KasirAuth.refreshInventoryProducts();
      if (Array.isArray(serverProds)) {
-       const mergedMap = new Map();
-       products.forEach(item => mergedMap.set(item.id, item));
-       serverProds.forEach(item => mergedMap.set(item.id, item));
-       products = [...mergedMap.values()];
-       save(STORE.products, products);
+       products = serverProds;
        syncOwnersFromProducts();
        renderOwnerSuggestions();
        syncOwnerCodeFromName();
@@ -487,6 +495,7 @@ async function addProduct(){
  renderOwnerSuggestions();
  
  $("productCode").value=genProductCode();
+ _lastProdukRenderHash = '';
  render();
  toast(`Produk ${name} berhasil ditambahkan · Kode UMKM ${owner.code}`);
 }
@@ -508,6 +517,7 @@ function rebuildOwnerFilter(){
  ownerNames.forEach(owner=>ownerFilter.add(new Option(owner,owner)));
  ownerFilter.value=ownerNames.includes(selectedOwner)?selectedOwner:"";
 }
+let _lastProdukRenderHash = '';
 function render(){
  rebuildOwnerFilter();
  const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
@@ -524,6 +534,12 @@ function render(){
   if(codeA!==codeB)return codeA.localeCompare(codeB);
   return String(a.name||"").localeCompare(String(b.name||""),"id");
  });
+ const currentRenderHash = `${query}|${selectedOwner}|${filteredProducts.map(p => `${p.id}:${p.stock}:${p.price}:${p.cost}:${p.barcode}:${p.owner}:${p.ownerCode}`).join(';')}`;
+ if (currentRenderHash === _lastProdukRenderHash) {
+  return;
+ }
+ _lastProdukRenderHash = currentRenderHash;
+
  $("count").textContent=filteredProducts.length+" dari "+products.length+" produk";
  $("empty").textContent=products.length?"Produk tidak ditemukan.":"Belum ada produk.";
  $("empty").style.display=filteredProducts.length?"none":"block";
@@ -548,6 +564,7 @@ function render(){
      products = products.filter(x=>x.id!==p.id);
      save(STORE.products,products);
     }
+    _lastProdukRenderHash = '';
     render();
    }
   };

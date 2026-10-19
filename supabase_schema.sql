@@ -1211,10 +1211,19 @@ begin
   -- Kelompokkan produk berdasarkan tenant pemilik dan simpan secara atomik
   for t_user_id, incoming_tenant_prods in
     select
-      coalesce(nullif(p.val ->> '_tenantUserId', '')::uuid, target_admin_id) as tenant_id,
+      case
+        when (p.val ->> '_tenantUserId') is not null
+             and (caller_store_code <> '' and exists (
+               select 1 from public.user_profiles p_sub
+               where p_sub.user_id = (p.val ->> '_tenantUserId')::uuid
+                 and upper(coalesce(p_sub.store_code, '')) = upper(caller_store_code)
+             ))
+        then (p.val ->> '_tenantUserId')::uuid
+        else target_admin_id
+      end as tenant_id,
       jsonb_agg(p.val - '_tenantUserId') as prods
     from jsonb_array_elements(p_products) as p(val)
-    group by coalesce(nullif(p.val ->> '_tenantUserId', '')::uuid, target_admin_id)
+    group by 1
   loop
     if p_replace then
       merged_tenant_prods := coalesce(incoming_tenant_prods, '[]'::jsonb);

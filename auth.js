@@ -195,8 +195,13 @@
     }
   }
 
+  let cachedStoreTenantUserIds = new Set();
+
   function handleIncomingPostgresChange(key, value, rowUserId) {
     if (!DATA_NAMES.includes(key) || !Array.isArray(value)) return;
+    if (rowUserId && cachedStoreTenantUserIds.size > 0 && !cachedStoreTenantUserIds.has(rowUserId)) {
+      return;
+    }
     const lk = localKey(key);
     hydrating = true;
     try {
@@ -222,7 +227,9 @@
         const currentLocal = readLocal(lk, []);
         const currentProducts = Array.isArray(currentLocal) ? currentLocal : [];
         const tenantId = rowUserId || currentUser.id;
-        const tenantProducts = (Array.isArray(value) ? value : []).map(p => ({ ...p, _tenantUserId: tenantId }));
+        const tenantProducts = (Array.isArray(value) ? value : [])
+          .filter(p => !p._tenantUserId || cachedStoreTenantUserIds.size === 0 || cachedStoreTenantUserIds.has(p._tenantUserId))
+          .map(p => ({ ...p, _tenantUserId: tenantId }));
         const merged = mergeProductArrays(currentProducts, tenantProducts);
         originalSetItem(lk, JSON.stringify(merged));
         window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
@@ -297,7 +304,8 @@
 
         const grouped = new Map();
         for (const product of finalMerged) {
-          const tenantId = product._tenantUserId || currentUser.id;
+          const rawTenantId = product._tenantUserId;
+          const tenantId = (rawTenantId && tenantIds.includes(rawTenantId)) ? rawTenantId : currentUser.id;
           if (!grouped.has(tenantId)) grouped.set(tenantId, []);
           const { _tenantUserId, ...storedProduct } = product;
           grouped.get(tenantId).push(storedProduct);
@@ -382,6 +390,7 @@
     if (!storeAdminUserId && currentProfile?.role === 'admin') {
       storeAdminUserId = currentUser.id;
     }
+    cachedStoreTenantUserIds = new Set(ids);
     return ids;
   }
 
@@ -406,11 +415,12 @@
       for (const row of (data || [])) {
         if (row.key === 'products') {
           loadedProductTenantIds.add(row.user_id);
-          const products = Array.isArray(row.value) ? row.value : [];
+          const rawProds = Array.isArray(row.value) ? row.value : [];
+          const validProds = rawProds.filter(p => !p._tenantUserId || tenantIds.includes(p._tenantUserId));
           if (['admin', 'cashier'].includes(currentProfile?.role)) {
-            allProducts.push(...products.map(product => ({ ...product, _tenantUserId: row.user_id })));
+            allProducts.push(...validProds.map(product => ({ ...product, _tenantUserId: product._tenantUserId || row.user_id })));
           } else if (row.user_id === currentUser.id) {
-            originalSetItem(localKey('products'), JSON.stringify(products.map(product => ({ ...product, _tenantUserId: currentUser.id }))));
+            originalSetItem(localKey('products'), JSON.stringify(validProds.map(product => ({ ...product, _tenantUserId: currentUser.id }))));
           }
         } else if (DATA_NAMES.includes(row.key)) {
           if (['admin', 'cashier'].includes(currentProfile?.role)) {
@@ -492,7 +502,12 @@
     for (const row of data || []) {
       loadedProductTenantIds.add(row.user_id);
       if (Array.isArray(row.value)) {
-        products.push(...row.value.map(product => ({ ...product, _tenantUserId: row.user_id })));
+        for (const product of row.value) {
+          if (product._tenantUserId && !tenantIds.includes(product._tenantUserId)) {
+            continue; // Buang produk yang berasal dari tenant toko lain
+          }
+          products.push({ ...product, _tenantUserId: product._tenantUserId || row.user_id });
+        }
       }
     }
     if (!loadedProductTenantIds.has(currentUser.id)) loadedProductTenantIds.add(currentUser.id);
@@ -555,7 +570,8 @@
 
       const grouped = new Map();
       for (const p of finalMerged) {
-        const tId = p._tenantUserId || currentUser.id;
+        const rawTId = p._tenantUserId;
+        const tId = (rawTId && tenantIds.includes(rawTId)) ? rawTId : currentUser.id;
         if (!grouped.has(tId)) grouped.set(tId, []);
         const { _tenantUserId, ...cleanProd } = p;
         grouped.get(tId).push(cleanProd);
