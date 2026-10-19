@@ -165,9 +165,17 @@ catch(error) {
 }
 function syncOwnersFromProducts() {
   let changed = false;
+  // Bersihkan produk yang sempat tercemar kode produk di kolom ownerCode
+  products.forEach(p => {
+    if (p.ownerCode && !/^\d{4}$/.test(String(p.ownerCode))) {
+      p.ownerCode = '';
+      changed = true;
+    }
+  });
+
   const validCodes = new Set([
-    ...products.map(p => String(p.ownerCode || '')).filter(Boolean),
-    ...ownerAccounts.map(a => String(a.owner_code || '')).filter(Boolean)
+    ...products.map(p => String(p.ownerCode || p.owner_code || '')).filter(c => /^\d{4}$/.test(c)),
+    ...ownerAccounts.map(a => String(a.owner_code || '')).filter(c => /^\d{4}$/.test(c))
   ]);
   const validNames = new Set([
     ...products.map(p => cleanOwner(p.owner).toLowerCase()).filter(Boolean),
@@ -177,24 +185,28 @@ function syncOwnersFromProducts() {
   owners = owners.filter(o => {
     const c = String(o.code || o.ownerCode || '');
     const n = cleanOwner(o.name).toLowerCase();
-    return (c && validCodes.has(c)) || (n && validNames.has(n));
+    return (/^\d{4}$/.test(c) && validCodes.has(c)) || (n && validNames.has(n));
   });
   if (owners.length !== initialLen) changed = true;
 
   products.forEach(p => {
-    if (p.owner && p.ownerCode) {
+    const rawOwnerCode = String(p.ownerCode || p.owner_code || '');
+    if (p.owner && /^\d{4}$/.test(rawOwnerCode)) {
       const clean = cleanOwner(p.owner);
       const idx = owners.findIndex(o => cleanOwner(o.name).toLowerCase() === clean.toLowerCase());
       if (idx === -1) {
-        owners.push({ name: clean, code: String(p.ownerCode) });
+        owners.push({ name: clean, code: rawOwnerCode });
         changed = true;
-      } else if (!owners[idx].code && p.ownerCode) {
-        owners[idx].code = String(p.ownerCode);
+      } else if (!/^\d{4}$/.test(String(owners[idx].code || ''))) {
+        owners[idx].code = rawOwnerCode;
         changed = true;
       }
     }
   });
-  if (changed) save(STORE.owners, owners);
+  if (changed) {
+    save(STORE.owners, owners);
+    save(STORE.products, products);
+  }
 }
 syncOwnersFromProducts();
 if(KasirAuth.isUmkm){
@@ -208,10 +220,12 @@ function ownerCodeFor(name){
  const clean=cleanOwner(name).toLowerCase();
  if(!clean)return "";
  const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===clean);
- if(account?.owner_code)return account.owner_code;
- if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_code)return KasirAuth.profile.owner_code;
- const existing=products.find(product=>cleanOwner(product.owner).toLowerCase()===clean);
- if(existing?.code||existing?.ownerCode)return existing.code||existing.ownerCode;
+ if(account?.owner_code&&/^\d{4}$/.test(String(account.owner_code)))return String(account.owner_code);
+ if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_code&&/^\d{4}$/.test(String(KasirAuth.profile.owner_code)))return String(KasirAuth.profile.owner_code);
+ const ownerEntry=owners.find(item=>cleanOwner(item.name).toLowerCase()===clean&&/^\d{4}$/.test(String(item.code||"")));
+ if(ownerEntry?.code)return String(ownerEntry.code);
+ const existing=products.find(product=>cleanOwner(product.owner).toLowerCase()===clean&&/^\d{4}$/.test(String(product.ownerCode||product.owner_code||"")));
+ if(existing)return String(existing.ownerCode||existing.owner_code);
  return "";
 }
 function generateOwnerCode(name){
@@ -221,8 +235,9 @@ function generateOwnerCode(name){
  const existingCode=ownerCodeFor(name);
  if(existingCode)return String(existingCode);
  const usedCodes=new Set([
-  ...ownerAccounts.map(owner=>String(owner.owner_code||"")),
-  ...products.map(product=>String(product.ownerCode||product.owner_code||""))
+  ...ownerAccounts.map(owner=>String(owner.owner_code||"")).filter(c=>/^\d{4}$/.test(c)),
+  ...products.map(product=>String(product.ownerCode||product.owner_code||"")).filter(c=>/^\d{4}$/.test(c)),
+  ...owners.map(owner=>String(owner.code||"")).filter(c=>/^\d{4}$/.test(c))
  ]);
  const availableCodes=Array.from({length:10000},(_,value)=>String(value).padStart(4,"0"))
   .filter(code=>!usedCodes.has(code));

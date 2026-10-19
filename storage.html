@@ -846,14 +846,15 @@
                 if (owners.length !== initialLen) changed = true;
 
                 products.forEach(p => {
-                    if (p.owner && p.ownerCode) {
+                    const rawOwnerCode = String(p.ownerCode || p.owner_code || '');
+                    if (p.owner && /^\d{4}$/.test(rawOwnerCode)) {
                         const clean = cleanOwner(p.owner);
                         const idx = owners.findIndex(o => cleanOwner(o.name).toLowerCase() === clean.toLowerCase());
                         if (idx === -1) {
-                            owners.push({ name: clean, code: String(p.ownerCode) });
+                            owners.push({ name: clean, code: rawOwnerCode });
                             changed = true;
-                        } else if (!owners[idx].code && p.ownerCode) {
-                            owners[idx].code = String(p.ownerCode);
+                        } else if (!/^\d{4}$/.test(String(owners[idx].code || ''))) {
+                            owners[idx].code = rawOwnerCode;
                             changed = true;
                         }
                     }
@@ -861,7 +862,17 @@
                 if (changed) save(STORE.owners, owners);
             }
             syncOwnersFromProducts();
-            function ownerMetadata(name) { const clean = cleanOwner(name), key = clean.toLowerCase(); if (!clean) return null; if (KasirAuth.isUmkm && KasirAuth.profile?.owner_name) return { name: KasirAuth.profile.owner_name, code: KasirAuth.profile.owner_code || '', userId: KasirAuth.current()?.id }; const account = ownerAccounts.find(item => cleanOwner(item.owner_name).toLowerCase() === key); if (account) return { name: account.owner_name, code: account.owner_code, userId: account.user_id }; const owner = owners.find(x => cleanOwner(x.name).toLowerCase() === key) || products.find(x => cleanOwner(x.owner).toLowerCase() === key); return { name: clean, code: owner?.code || owner?.ownerCode || '', userId: KasirAuth.current()?.id } }
+            function ownerMetadata(name) {
+                const clean = cleanOwner(name), key = clean.toLowerCase();
+                if (!clean) return null;
+                if (KasirAuth.isUmkm && KasirAuth.profile?.owner_name) return { name: KasirAuth.profile.owner_name, code: KasirAuth.profile.owner_code || '', userId: KasirAuth.current()?.id };
+                const account = ownerAccounts.find(item => cleanOwner(item.owner_name).toLowerCase() === key);
+                if (account) return { name: account.owner_name, code: account.owner_code, userId: account.user_id };
+                const ownerObj = owners.find(x => cleanOwner(x.name).toLowerCase() === key && /^\d{4}$/.test(String(x.code || '')));
+                const productObj = products.find(x => cleanOwner(x.owner).toLowerCase() === key && /^\d{4}$/.test(String(x.ownerCode || x.owner_code || '')));
+                const code = ownerObj?.code || productObj?.ownerCode || productObj?.owner_code || '';
+                return { name: clean, code, userId: KasirAuth.current()?.id };
+            }
             function normalize(p) { let changed = false; p.stock = Math.max(0, Number(p.stock) || 0); p.reorder = Math.max(0, Number(p.reorder) || 0); p.owner = cleanOwner(p.owner); p.ingredients = Array.isArray(p.ingredients) ? p.ingredients : []; if (p.owner && !/^\d{4}$/.test(String(p.ownerCode || ''))) { const owner = ownerMetadata(p.owner); if (/^\d{4}$/.test(String(owner?.code || ''))) { p.ownerCode = owner.code; changed = true } } if (changed) p._storageChanged = true; return p }
             if (!isUmkm) {
                 products = sortProducts(products.map(normalize));
