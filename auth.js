@@ -861,6 +861,72 @@
     return data;
   }
 
+  async function getForeignUmkmCodes() {
+    await ready;
+    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || '').trim();
+    const foreignUmkmCodes = new Set();
+    if (!client || !storeCode) return foreignUmkmCodes;
+    try {
+      const { data } = await client
+        .from('user_profiles')
+        .select('owner_code')
+        .eq('role', 'umkm')
+        .not('store_code', 'is', null)
+        .neq('store_code', storeCode);
+      if (Array.isArray(data)) {
+        data.forEach(u => {
+          if (u.owner_code) foreignUmkmCodes.add(String(u.owner_code));
+        });
+      }
+    } catch (e) {
+      console.warn('Gagal memuat profil UMKM toko lain:', e);
+    }
+    return foreignUmkmCodes;
+  }
+
+  async function deleteCashEntry(entryId) {
+    await ready;
+    const eid = String(entryId || '').trim();
+    if (!eid) return [];
+
+    const lk = localKey('cash');
+    const localCash = readLocal(lk, []);
+    const updated = localCash.filter(c => String(c.id || '') !== eid);
+    originalSetItem(lk, JSON.stringify(updated));
+
+    if (client && currentUser && ['admin', 'cashier'].includes(currentProfile?.role)) {
+      try {
+        await client.rpc('delete_cash_entry', { p_entry_id: eid });
+      } catch (err) {
+        console.warn('RPC delete_cash_entry gagal, fallback:', err);
+        try {
+          const tenantIds = await getStoreTenantUserIds();
+          const { data: rows } = await client
+            .from('user_data')
+            .select('user_id, value')
+            .eq('key', 'cash')
+            .in('user_id', tenantIds);
+          for (const row of (rows || [])) {
+            if (Array.isArray(row.value)) {
+              const filtered = row.value.filter(c => String(c.id || '') !== eid);
+              if (filtered.length !== row.value.length) {
+                await client.from('user_data').update({
+                  value: filtered,
+                  updated_at: new Date().toISOString()
+                }).eq('user_id', row.user_id).eq('key', 'cash');
+              }
+            }
+          }
+        } catch (e2) {
+          console.error('Fallback delete cash gagal:', e2);
+        }
+      }
+      broadcastStoreEvent('data_updated', { key: 'cash', value: updated });
+    }
+    window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'cash' } }));
+    return updated;
+  }
+
   async function listOwnerStorageProducts() {
     await ready;
     if (!client || !currentUser || currentProfile?.role !== 'umkm') {
@@ -1459,7 +1525,7 @@
     logout, requireAuth, signUp, signIn, resetPassword, uploadAvatar, loadProfile, listOwnerAccounts,
     listStockMovements, recordStockMovements, listOwnerSettlements, markOwnerSettlement,
     listBookkeepingData, listOwnerStorageProducts, claimOwnerCode, updateOwnerProductStorage, updateOwnerProductIngredients,
-    recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, deleteProduct, ready,
+    recordPosTransaction, refreshInventoryProducts, saveProductsAndWait, deleteProduct, deleteCashEntry, getForeignUmkmCodes, ready,
     get session() { return session; },
     get profile() { return currentProfile; },
     get role() { return currentProfile?.role || null; },

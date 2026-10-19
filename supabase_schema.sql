@@ -397,7 +397,7 @@ with check (
 grant select, insert, update on public.owner_settlements to authenticated;
 
 -- Buku Kas exposes only owner-scoped sale lines to UMKM accounts.
--- Admin/Kasir receive all cash entries and sale lines.
+-- Admin/Kasir receive all cash entries and store sales; UMKM receive only their own consignment sale lines.
 create or replace function public.get_bookkeeping_data()
 returns jsonb
 language plpgsql
@@ -417,8 +417,8 @@ begin
   from public.user_profiles p
   where p.user_id = (select auth.uid());
 
-  if caller_role is null or caller_role not in ('admin', 'cashier') then
-    raise exception 'Buku Kas hanya dapat diakses oleh Admin/Kasir.';
+  if caller_role is null or caller_role not in ('admin', 'cashier', 'umkm') then
+    raise exception 'Buku Kas hanya dapat diakses oleh Admin, Kasir, atau UMKM.';
   end if;
 
   if caller_role in ('admin', 'cashier') then
@@ -438,44 +438,75 @@ begin
           select p2.user_id from public.user_profiles p2 where upper(p2.store_code) = upper(caller_store_code)
         ))
       );
-  end if;
 
-  select coalesce(
-    jsonb_agg(jsonb_build_object(
-      'sale_id', sale.value ->> 'id',
-      'date', sale.value ->> 'date',
-      'source_user_id', d.user_id,
-      'name', item.value ->> 'name',
-      'barcode', item.value ->> 'barcode',
-      'code', coalesce(item.value ->> 'code', item.value ->> 'productCode', ''),
-      'owner_code', coalesce(item.value ->> 'ownerCode', item.value ->> 'owner_code', ''),
-      'owner_name', coalesce(item.value ->> 'owner', item.value ->> 'owner_name', ''),
-      'qty', coalesce(item.value ->> 'qty', '0'),
-      'price', coalesce(item.value ->> 'price', '0'),
-      'cost', coalesce(item.value ->> 'cost', '0'),
-      'total', coalesce(item.value ->> 'total', '0')
-    )),
-    '[]'::jsonb
-  )
-  into sale_items
-  from public.user_data d
-  cross join lateral jsonb_array_elements(
-    case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
-  ) as sale(value)
-  cross join lateral jsonb_array_elements(
-    case
-      when jsonb_typeof(sale.value -> 'items') = 'array' then sale.value -> 'items'
-      else '[]'::jsonb
-    end
-  ) as item(value)
-  where d.key = 'sales'
-    and caller_role in ('admin', 'cashier')
-    and (
-      d.user_id = (select auth.uid())
-      or (caller_store_code is not null and caller_store_code <> '' and d.user_id in (
-        select p2.user_id from public.user_profiles p2 where upper(p2.store_code) = upper(caller_store_code)
-      ))
-    );
+    select coalesce(
+      jsonb_agg(jsonb_build_object(
+        'sale_id', sale.value ->> 'id',
+        'date', sale.value ->> 'date',
+        'source_user_id', d.user_id,
+        'name', item.value ->> 'name',
+        'barcode', item.value ->> 'barcode',
+        'code', coalesce(item.value ->> 'code', item.value ->> 'productCode', ''),
+        'owner_code', coalesce(item.value ->> 'ownerCode', item.value ->> 'owner_code', ''),
+        'owner_name', coalesce(item.value ->> 'owner', item.value ->> 'owner_name', ''),
+        'qty', coalesce(item.value ->> 'qty', '0'),
+        'price', coalesce(item.value ->> 'price', '0'),
+        'cost', coalesce(item.value ->> 'cost', '0'),
+        'total', coalesce(item.value ->> 'total', '0')
+      )),
+      '[]'::jsonb
+    )
+    into sale_items
+    from public.user_data d
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+    ) as sale(value)
+    cross join lateral jsonb_array_elements(
+      case
+        when jsonb_typeof(sale.value -> 'items') = 'array' then sale.value -> 'items'
+        else '[]'::jsonb
+      end
+    ) as item(value)
+    where d.key = 'sales'
+      and (
+        d.user_id = (select auth.uid())
+        or (caller_store_code is not null and caller_store_code <> '' and d.user_id in (
+          select p2.user_id from public.user_profiles p2 where upper(p2.store_code) = upper(caller_store_code)
+        ))
+      );
+  elsif caller_role = 'umkm' and caller_owner_code is not null and caller_owner_code <> '' then
+    -- UMKM: Kas umum toko disterilkan (selalu kosong), hanya membaca penjualan produk titipan dengan owner_code miliknya
+    select coalesce(
+      jsonb_agg(jsonb_build_object(
+        'sale_id', sale.value ->> 'id',
+        'date', sale.value ->> 'date',
+        'source_user_id', d.user_id,
+        'name', item.value ->> 'name',
+        'barcode', item.value ->> 'barcode',
+        'code', coalesce(item.value ->> 'code', item.value ->> 'productCode', ''),
+        'owner_code', coalesce(item.value ->> 'ownerCode', item.value ->> 'owner_code', ''),
+        'owner_name', coalesce(item.value ->> 'owner', item.value ->> 'owner_name', ''),
+        'qty', coalesce(item.value ->> 'qty', '0'),
+        'price', coalesce(item.value ->> 'price', '0'),
+        'cost', coalesce(item.value ->> 'cost', '0'),
+        'total', coalesce(item.value ->> 'total', '0')
+      )),
+      '[]'::jsonb
+    )
+    into sale_items
+    from public.user_data d
+    cross join lateral jsonb_array_elements(
+      case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end
+    ) as sale(value)
+    cross join lateral jsonb_array_elements(
+      case
+        when jsonb_typeof(sale.value -> 'items') = 'array' then sale.value -> 'items'
+        else '[]'::jsonb
+      end
+    ) as item(value)
+    where d.key = 'sales'
+      and coalesce(item.value ->> 'ownerCode', item.value ->> 'owner_code') = caller_owner_code;
+  end if;
 
   return jsonb_build_object('cash', cash_entries, 'sales', sale_items);
 end;
@@ -483,6 +514,71 @@ $$;
 
 revoke all on function public.get_bookkeeping_data() from public, anon;
 grant execute on function public.get_bookkeeping_data() to authenticated;
+
+-- Fungsi hapus catatan kas manual (admin / kasir)
+create or replace function public.delete_cash_entry(p_entry_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := (select auth.uid());
+  caller_role text;
+  caller_store_code text;
+  target_user_ids uuid[];
+  row_rec record;
+  new_arr jsonb;
+begin
+  if caller_id is null then
+    raise exception 'Silakan login terlebih dahulu.';
+  end if;
+
+  select p.role, coalesce(p.store_code, '')
+    into caller_role, caller_store_code
+  from public.user_profiles p
+  where p.user_id = caller_id;
+
+  if caller_role is null or caller_role not in ('admin', 'cashier') then
+    raise exception 'Hanya Admin/Kasir yang dapat menghapus catatan kas.';
+  end if;
+
+  if caller_store_code <> '' then
+    select coalesce(array_agg(p2.user_id), array[caller_id])
+      into target_user_ids
+    from public.user_profiles p2
+    where upper(p2.store_code) = upper(caller_store_code);
+  else
+    target_user_ids := array[caller_id];
+  end if;
+
+  for row_rec in
+    select d.user_id, d.value
+    from public.user_data d
+    where d.key = 'cash'
+      and d.user_id = any(target_user_ids)
+    for update
+  loop
+    select coalesce(
+      jsonb_agg(elem.val),
+      '[]'::jsonb
+    )
+    into new_arr
+    from jsonb_array_elements(case when jsonb_typeof(row_rec.value) = 'array' then row_rec.value else '[]'::jsonb end) as elem(val)
+    where coalesce(elem.val ->> 'id', '') <> p_entry_id;
+
+    update public.user_data
+    set value = new_arr,
+        updated_at = now()
+    where user_id = row_rec.user_id and key = 'cash';
+  end loop;
+
+  return jsonb_build_object('success', true, 'deleted_id', p_entry_id);
+end;
+$$;
+
+revoke all on function public.delete_cash_entry(text) from public, anon;
+grant execute on function public.delete_cash_entry(text) to authenticated;
 
 -- Existing UMKM accounts can safely relink to the code already stored on their products.
 create or replace function public.claim_owner_code(p_owner_code text)
