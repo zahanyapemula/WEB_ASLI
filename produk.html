@@ -152,11 +152,39 @@ let owners=load(STORE.owners,[]);
 const cleanOwner=name=>String(name||"").trim().replace(/\s+/g," ");
 let ownerAccounts=[];
 let ownerAccountsError=null;
-try { ownerAccounts=await KasirAuth.listOwnerAccounts(); }
+try {
+  ownerAccounts=await KasirAuth.listOwnerAccounts();
+  const serverProds = await KasirAuth.refreshInventoryProducts();
+  if (Array.isArray(serverProds)) {
+    const mergedMap = new Map();
+    products.forEach(item => mergedMap.set(item.id, item));
+    serverProds.forEach(item => mergedMap.set(item.id, item));
+    products = [...mergedMap.values()];
+    save(STORE.products, products);
+  }
+}
 catch(error) {
  ownerAccountsError=error;
- console.error("Daftar akun owner gagal dimuat:",error);
+ console.error("Daftar akun owner/produk gagal dimuat:",error);
 }
+function syncOwnersFromProducts() {
+  let changed = false;
+  products.forEach(p => {
+    if (p.owner && p.ownerCode) {
+      const clean = cleanOwner(p.owner);
+      const idx = owners.findIndex(o => cleanOwner(o.name).toLowerCase() === clean.toLowerCase());
+      if (idx === -1) {
+        owners.push({ name: clean, code: String(p.ownerCode) });
+        changed = true;
+      } else if (!owners[idx].code && p.ownerCode) {
+        owners[idx].code = String(p.ownerCode);
+        changed = true;
+      }
+    }
+  });
+  if (changed) save(STORE.owners, owners);
+}
+syncOwnersFromProducts();
 if(KasirAuth.isUmkm){
  $("productOwner").value=KasirAuth.profile?.owner_name||"";
  $("productOwner").readOnly=true;
@@ -266,6 +294,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
   if (!event.detail?.name || event.detail.name === 'products') {
     owners = load(STORE.owners, []);
     products = load(STORE.products, []);
+    syncOwnersFromProducts();
     renderOwnerSuggestions();
     syncOwnerCodeFromName();
     render();
@@ -275,6 +304,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
   if(event.key===STORE.owners||event.key===STORE.products){
     owners=load(STORE.owners,[]);
     products=load(STORE.products,[]);
+    syncOwnersFromProducts();
     renderOwnerSuggestions();
     syncOwnerCodeFromName();
     render();
@@ -285,6 +315,29 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
     }
   }
  });
+ let refreshingProduk = false;
+ async function refreshProdukData() {
+   if (refreshingProduk || document.visibilityState === 'hidden') return;
+   refreshingProduk = true;
+   try {
+     const serverProds = await KasirAuth.refreshInventoryProducts();
+     if (Array.isArray(serverProds)) {
+       const mergedMap = new Map();
+       products.forEach(item => mergedMap.set(item.id, item));
+       serverProds.forEach(item => mergedMap.set(item.id, item));
+       products = [...mergedMap.values()];
+       save(STORE.products, products);
+       syncOwnersFromProducts();
+       renderOwnerSuggestions();
+       syncOwnerCodeFromName();
+       render();
+     }
+   } catch (_) {}
+   finally { refreshingProduk = false; }
+ }
+ window.addEventListener('focus', refreshProdukData);
+ document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refreshProdukData(); });
+ window.setInterval(() => { if (document.visibilityState === 'visible') void refreshProdukData(); }, 5_000);
 renderOwnerSuggestions();
 function randomDigits(length){
   let out = "";
@@ -409,14 +462,23 @@ async function addProduct(){
  addButton.disabled=true;
  try{
   const updatedProducts = await KasirAuth.saveProductsAndWait([product], false);
-  products = Array.isArray(updatedProducts) && updatedProducts.length ? updatedProducts : load(STORE.products, [...products, product]);
+  const mergedMap = new Map();
+  products.forEach(item => mergedMap.set(item.id, item));
+  if (Array.isArray(updatedProducts)) {
+    updatedProducts.forEach(item => mergedMap.set(item.id, item));
+  }
+  mergedMap.set(product.id, product);
+  products = [...mergedMap.values()];
  }catch(error){
   console.error("Produk gagal disimpan ke Supabase:",error);
-  toast(`Produk belum tersimpan ke server: ${error.message}`);
-  return;
+  const idx = products.findIndex(x => x.id === product.id);
+  if (idx >= 0) products[idx] = product; else products.push(product);
+  save(STORE.products, products);
+  toast(`Produk tersimpan lokal: ${error.message}`);
  }finally{
   addButton.disabled=false;
  }
+ syncOwnersFromProducts();
  $("name").value="";
  $("price").value="";
  $("cost").value="";

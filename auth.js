@@ -223,8 +223,7 @@
         const currentProducts = Array.isArray(currentLocal) ? currentLocal : [];
         const tenantId = rowUserId || currentUser.id;
         const tenantProducts = (Array.isArray(value) ? value : []).map(p => ({ ...p, _tenantUserId: tenantId }));
-        const otherTenants = currentProducts.filter(p => (p._tenantUserId || currentUser.id) !== tenantId);
-        const merged = [...otherTenants, ...tenantProducts];
+        const merged = mergeProductArrays(currentProducts, tenantProducts);
         originalSetItem(lk, JSON.stringify(merged));
         window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
       }
@@ -277,36 +276,55 @@
         console.warn('sync_user_data_products error:', err);
       }
 
-      // Fallback aman: tidak pernah menghapus data produk tenant lain menjadi []
-      const grouped = new Map();
-      for (const product of Array.isArray(value) ? value : []) {
-        const tenantId = product._tenantUserId || currentUser.id;
-        if (!grouped.has(tenantId)) grouped.set(tenantId, []);
-        const { _tenantUserId, ...storedProduct } = product;
-        grouped.get(tenantId).push(storedProduct);
-      }
+      // Fallback aman: ambil data server terbaru, gabungkan tanpa menghapus produk lain
+      try {
+        const tenantIds = await getStoreTenantUserIds();
+        const { data: serverRows } = await client
+          .from('user_data')
+          .select('user_id, value')
+          .eq('key', 'products')
+          .in('user_id', tenantIds);
 
-      for (const [userId, tenantProds] of grouped.entries()) {
-        try {
-          const { data: existingRow } = await client
-            .from('user_data')
-            .select('value')
-            .eq('user_id', userId)
-            .eq('key', 'products')
-            .maybeSingle();
-          const existingList = Array.isArray(existingRow?.value) ? existingRow.value : [];
-          const mergedList = mergeProductArrays(existingList, tenantProds);
+        let allServer = [];
+        for (const row of (serverRows || [])) {
+          if (Array.isArray(row.value)) {
+            allServer.push(...row.value.map(p => ({ ...p, _tenantUserId: row.user_id })));
+          }
+        }
+        const currentLocal = readLocal(localKey('products'), []);
+        const baseList = mergeProductArrays(allServer, Array.isArray(currentLocal) ? currentLocal : []);
+        const finalMerged = mergeProductArrays(baseList, Array.isArray(value) ? value : []);
+
+        const grouped = new Map();
+        for (const product of finalMerged) {
+          const tenantId = product._tenantUserId || currentUser.id;
+          if (!grouped.has(tenantId)) grouped.set(tenantId, []);
+          const { _tenantUserId, ...storedProduct } = product;
+          grouped.get(tenantId).push(storedProduct);
+        }
+        if (!grouped.has(currentUser.id)) grouped.set(currentUser.id, []);
+
+        for (const [userId, tenantProds] of grouped.entries()) {
           await client.from('user_data').upsert({
             user_id: userId,
             key: 'products',
-            value: mergedList,
+            value: tenantProds,
             updated_at: new Date().toISOString()
           }, { onConflict: 'user_id,key' });
-        } catch (saveErr) {
-          console.warn('Fallback save tenant error:', saveErr);
         }
+
+        hydrating = true;
+        try {
+          originalSetItem(localKey('products'), JSON.stringify(finalMerged));
+        } finally {
+          hydrating = false;
+        }
+
+        broadcastStoreEvent('data_updated', { key: 'products', value: finalMerged });
+        window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+      } catch (fallbackErr) {
+        console.warn('Fallback saveCloud products error:', fallbackErr);
       }
-      broadcastStoreEvent('data_updated', { key: 'products', value });
       return;
     }
     const { error } = await client.from('user_data').upsert({
@@ -418,8 +436,8 @@
       realtimeChannel = null;
     }
 
-    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || 'default').trim().toLowerCase();
-    const channelName = 'store_sync_' + (storeCode || String(currentUser.id).substring(0, 8));
+    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || '').trim().toLowerCase();
+    const channelName = storeCode ? `store_sync_${storeCode}` : `store_sync_user_${currentUser.id}`;
 
     realtimeChannel = client
       .channel(channelName, {
@@ -493,7 +511,7 @@
         p_products: products,
         p_replace: Boolean(replace)
       });
-      if (!error && Array.isArray(data)) {
+      if (!error && Array.isArray(data) && data.length >= products.length) {
         hydrating = true;
         try {
           originalSetItem(localKey('products'), JSON.stringify(data));
@@ -504,12 +522,72 @@
         window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
         return data;
       }
+      if (error) console.warn('RPC sync_user_data_products returned error:', error);
     } catch (err) {
       console.warn('RPC sync_user_data_products gagal, fallback:', err);
     }
-    await saveCloud('products', products);
-    const updated = readLocal(localKey('products'), products);
-    return updated;
+
+    // Fallback aman: gabungkan dengan seluruh produk yang ada di server
+    try {
+      const tenantIds = await getStoreTenantUserIds();
+      const { data: serverRows } = await client
+        .from('user_data')
+        .select('user_id, value')
+        .eq('key', 'products')
+        .in('user_id', tenantIds);
+
+      let allCurrentServer = [];
+      for (const row of (serverRows || [])) {
+        if (Array.isArray(row.value)) {
+          allCurrentServer.push(...row.value.map(p => ({ ...p, _tenantUserId: row.user_id })));
+        }
+      }
+
+      const currentLocal = readLocal(localKey('products'), []);
+      const baseList = mergeProductArrays(allCurrentServer, Array.isArray(currentLocal) ? currentLocal : []);
+
+      let finalMerged = [];
+      if (replace) {
+        finalMerged = products;
+      } else {
+        finalMerged = mergeProductArrays(baseList, products);
+      }
+
+      const grouped = new Map();
+      for (const p of finalMerged) {
+        const tId = p._tenantUserId || currentUser.id;
+        if (!grouped.has(tId)) grouped.set(tId, []);
+        const { _tenantUserId, ...cleanProd } = p;
+        grouped.get(tId).push(cleanProd);
+      }
+      if (!grouped.has(currentUser.id)) grouped.set(currentUser.id, []);
+
+      for (const [userId, tenantProds] of grouped.entries()) {
+        await client.from('user_data').upsert({
+          user_id: userId,
+          key: 'products',
+          value: tenantProds,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,key' });
+      }
+
+      hydrating = true;
+      try {
+        originalSetItem(localKey('products'), JSON.stringify(finalMerged));
+      } finally {
+        hydrating = false;
+      }
+
+      broadcastStoreEvent('data_updated', { key: 'products', value: finalMerged });
+      window.dispatchEvent(new CustomEvent('webpkm:data-change', { detail: { name: 'products' } }));
+      return finalMerged;
+    } catch (fallbackErr) {
+      console.error('Fallback saveProductsAndWait error:', fallbackErr);
+      const currentLocal = readLocal(localKey('products'), []);
+      const fallbackList = mergeProductArrays(Array.isArray(currentLocal) ? currentLocal : [], products);
+      originalSetItem(localKey('products'), JSON.stringify(fallbackList));
+      return fallbackList;
+    }
   }
 
   async function deleteProduct(productId) {
@@ -534,8 +612,29 @@
 
     if (!updatedProducts) {
       const current = readLocal(localKey('products'), []);
-      updatedProducts = current.filter(p => String(p.id) !== pid && String(p.code) !== pid);
-      await saveCloud('products', updatedProducts);
+      const filtered = current.filter(p => String(p.id) !== pid && String(p.code) !== pid);
+      try {
+        const tenantIds = await getStoreTenantUserIds();
+        const { data: serverRows } = await client
+          .from('user_data')
+          .select('user_id, value')
+          .eq('key', 'products')
+          .in('user_id', tenantIds);
+        for (const row of (serverRows || [])) {
+          if (Array.isArray(row.value)) {
+            const updatedTenantProds = row.value.filter(p => String(p.id) !== pid && String(p.code) !== pid);
+            await client.from('user_data').upsert({
+              user_id: row.user_id,
+              key: 'products',
+              value: updatedTenantProds,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id,key' });
+          }
+        }
+      } catch (err) {
+        console.warn('Fallback server delete failed:', err);
+      }
+      updatedProducts = filtered;
     }
 
     hydrating = true;
