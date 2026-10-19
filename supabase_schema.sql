@@ -985,8 +985,8 @@ begin
     select p2.user_id into target_user_id
     from public.user_profiles p2
     where upper(p2.store_code) = upper(caller_store_code)
-      and p2.role = 'admin'
-    order by p2.created_at asc
+      and p2.role in ('admin', 'cashier')
+    order by (case when p2.role = 'admin' then 0 else 1 end), p2.created_at asc
     limit 1;
     if target_user_id is null then
       target_user_id := caller_id;
@@ -1197,8 +1197,8 @@ begin
     select p2.user_id into target_user_id
     from public.user_profiles p2
     where upper(p2.store_code) = upper(caller_store_code)
-      and p2.role = 'admin'
-    order by p2.created_at asc
+      and p2.role in ('admin', 'cashier')
+    order by (case when p2.role = 'admin' then 0 else 1 end), p2.created_at asc
     limit 1;
     if target_user_id is null then
       target_user_id := caller_id;
@@ -1281,8 +1281,8 @@ begin
     select p2.user_id into target_admin_id
     from public.user_profiles p2
     where upper(p2.store_code) = upper(caller_store_code)
-      and p2.role = 'admin'
-    order by p2.created_at asc
+      and p2.role in ('admin', 'cashier')
+    order by (case when p2.role = 'admin' then 0 else 1 end), p2.created_at asc
     limit 1;
     if target_admin_id is null then
       target_admin_id := caller_id;
@@ -1418,8 +1418,8 @@ begin
     select p2.user_id into target_admin_id
     from public.user_profiles p2
     where upper(p2.store_code) = upper(caller_store_code)
-      and p2.role = 'admin'
-    order by p2.created_at asc
+      and p2.role in ('admin', 'cashier')
+    order by (case when p2.role = 'admin' then 0 else 1 end), p2.created_at asc
     limit 1;
     if target_admin_id is null then
       target_admin_id := caller_id;

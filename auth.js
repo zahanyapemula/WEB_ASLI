@@ -375,19 +375,24 @@
       try {
         const { data } = await client
           .from('user_profiles')
-          .select('user_id, role')
-          .ilike('store_code', storeCode);
+          .select('user_id, role, created_at')
+          .ilike('store_code', storeCode)
+          .order('created_at', { ascending: true });
         for (const row of (data || [])) {
           if (row.user_id && !ids.includes(row.user_id)) ids.push(row.user_id);
           if (row.role === 'admin' && !storeAdminUserId) {
             storeAdminUserId = row.user_id;
           }
         }
+        if (!storeAdminUserId) {
+          const firstCashier = (data || []).find(r => r.role === 'cashier');
+          if (firstCashier) storeAdminUserId = firstCashier.user_id;
+        }
       } catch (e) {
         console.warn('Gagal memuat tenant toko:', e);
       }
     }
-    if (!storeAdminUserId && currentProfile?.role === 'admin') {
+    if (!storeAdminUserId && ['admin', 'cashier'].includes(currentProfile?.role)) {
       storeAdminUserId = currentUser.id;
     }
     cachedStoreTenantUserIds = new Set(ids);
@@ -1025,7 +1030,11 @@
           return data;
         }
       } catch (err) {
-        console.warn('RPC record_pos_transaction gagal, fallback ke penyimpanan lokal:', err);
+        console.warn('RPC record_pos_transaction gagal:', err);
+        const isOffline = !navigator.onLine || /failed to fetch|network|offline/i.test(err?.message || '');
+        if (!isOffline) {
+          throw new Error(err.message || 'Gagal menyimpan transaksi ke server');
+        }
       }
     }
 
