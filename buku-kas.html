@@ -104,14 +104,14 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </nav></div></header>
 
 <div class="hero"><h2><span>Buku Kas</span> Usaha</h2><p id="bookkeepingIntro">Transaksi yang selesai di Kasir otomatis tercatat sebagai pemasukan. Tambahkan modal awal dan pengeluaran usaha secara manual untuk mendapatkan saldo dan net kas.</p><div class="note" id="bookkeepingNote">💡 Tidak perlu mengetik ulang barang yang dibeli. Detail barang, qty, harga, dan total berasal langsung dari transaksi Kasir.</div><div id="bookkeepingNotice" class="small" role="status" style="margin-top:10px"></div></div>
-<div class="stats"><div class="stat"><div class="icon">💰</div><small>Saldo Kas</small><strong id="saldo">Rp 0</strong></div><div class="stat"><div class="icon">📈</div><small>Pemasukan</small><strong id="income">Rp 0</strong></div><div class="stat red"><div class="icon">📉</div><small>Pengeluaran</small><strong id="expense">Rp 0</strong></div><div class="stat yellow"><div class="icon">🧾</div><small>Transaksi</small><strong id="trx">0</strong></div></div>
+<div class="stats"><div class="stat"><div class="icon">💰</div><small id="statSaldoLabel">Saldo Kas (Harian)</small><strong id="saldo">Rp 0</strong></div><div class="stat"><div class="icon">📈</div><small id="statIncomeLabel">Pemasukan (Harian)</small><strong id="income">Rp 0</strong></div><div class="stat red"><div class="icon">📉</div><small id="statExpenseLabel">Pengeluaran (Harian)</small><strong id="expense">Rp 0</strong></div><div class="stat yellow"><div class="icon">🧾</div><small id="statTrxLabel">Transaksi (Harian)</small><strong id="trx">0</strong></div></div>
 <div class="grid">
 <div>
 <div class="card"><div class="title"><h3>Tambah Modal / Catatan Kas</h3><span class="tag">Manual</span></div><div class="form">
-<div><label class="label">Tanggal</label><input id="date" type="date"></div><div><label class="label">Jenis</label><select id="type"><option value="pemasukan">Pemasukan Lain</option><option value="pengeluaran">Pengeluaran</option></select></div>
+<div><label class="label">Tanggal &amp; Waktu</label><input id="date" type="datetime-local"></div><div><label class="label">Jenis</label><select id="type"><option value="pemasukan">Pemasukan Lain</option><option value="pengeluaran">Pengeluaran</option></select></div>
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><div style="flex:2;min-width:180px"><input id="search" placeholder="Cari transaksi (keterangan, ID, metode)..."></div><div style="display:flex;gap:8px;flex:3;min-width:280px;align-items:center;flex-wrap:wrap"><div style="min-width:130px;flex:1"><select id="periodMode" aria-label="Pilihan periode"><option value="all">Semua Waktu</option><option value="daily">Per Hari (Harian)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="filterDayWrap" style="display:none;min-width:130px;flex:1"><input id="filterDay" type="date" aria-label="Pilih tanggal"></div><div id="filterMonthWrap" style="display:none;min-width:130px;flex:1"><select id="month" aria-label="Pilih bulan"><option value="all">Semua Bulan</option></select></div></div></div><div class="table"><table class="ledger-table"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Metode</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><div style="flex:2;min-width:180px"><input id="search" placeholder="Cari transaksi (keterangan, ID, metode)..."></div><div style="display:flex;gap:8px;flex:3;min-width:280px;align-items:center;flex-wrap:wrap"><div style="min-width:130px;flex:1"><select id="periodMode" aria-label="Pilihan periode"><option value="daily" selected>Per Hari (Harian)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="filterDayWrap" style="display:block;min-width:130px;flex:1"><input id="filterDay" type="date" aria-label="Pilih tanggal"></div><div id="filterMonthWrap" style="display:none;min-width:130px;flex:1"><input id="filterMonth" type="month" aria-label="Pilih bulan"></div></div></div><div class="table"><table class="ledger-table"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Metode</th><th>Masuk</th><th>Keluar</th><th>Saldo</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Rekapan UMKM</h3><span class="tag" id="recapModeTag">Harian</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end"><div style="min-width:140px;flex:1"><label class="label" for="recapPeriodMode">Periode Waktu</label><select id="recapPeriodMode"><option value="daily" selected>Per Hari (Harian)</option><option value="weekly">Per Minggu (Mingguan)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="recapDayWrap" style="min-width:140px;flex:1"><label class="label" for="recapDate">Pilih Tanggal</label><input id="recapDate" type="date"></div><div id="recapWeekWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapWeekDate">Pilih Tanggal Acuan Minggu</label><input id="recapWeekDate" type="date"></div><div id="recapMonthWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapMonth">Pilih Bulan</label><input id="recapMonth" type="month"></div><div id="recapOwnerFilterWrap" style="min-width:180px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapSummaryBanner" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:var(--soft2);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:12px"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Periode Terpilih</div><div id="recapPeriodLabel" style="font-size:13px;font-weight:800;color:#173120">—</div></div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div><span class="small" style="display:block">Total Dititip</span><b id="recapGrandDeposited" style="font-size:13px;color:#173120">0 unit</b></div><div><span class="small" style="display:block">Total Laku</span><b id="recapGrandSold" style="font-size:13px;color:#328f46">0 unit</b></div><div><span class="small" style="display:block">Total Pendapatan (HPP / Modal)</span><b id="recapGrandRevenue" class="money in" style="font-size:14px">Rp 0</b></div></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:12px"></div><div id="recapContainer"></div><div id="recapEmpty" class="empty" style="display:none">Belum ada produk titipan atau penjualan pada periode ini.</div></div>
 </div>
 <div>
@@ -130,6 +130,11 @@ const load=(k,d=[])=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e)
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const rp=n=>"Rp "+Number(n||0).toLocaleString("id-ID");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const nowLocalIso=()=>{
+ const d=new Date();
+ const pad=n=>String(n).padStart(2,"0");
+ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 const today=()=>{
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Makassar",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
  return `${parts.find(part=>part.type==="year").value}-${parts.find(part=>part.type==="month").value}-${parts.find(part=>part.type==="day").value}`;
@@ -138,8 +143,13 @@ const toast=s=>{let t=$("toast");if(!t)return;t.textContent=s;t.classList.add("s
 const fmtDate=d=>new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Makassar",day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date(d));
 const fmtDateTime=d=>{
  try{
-  const dt=new Date(d);
-  if(isNaN(dt.getTime()))return d||"—";
+  if(!d)return"—";
+  const str=String(d).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str)){
+   return fmtDate(str);
+  }
+  const dt=new Date(str);
+  if(isNaN(dt.getTime()))return str||"—";
   return new Intl.DateTimeFormat("id-ID",{timeZone:"Asia/Makassar",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(dt);
  }catch{
   return fmtDate(d);
@@ -151,14 +161,15 @@ const isManager=["admin","cashier"].includes(KasirAuth.role);
 let bookkeeping={cash:[],sales:[]};
 let stockMovements=[],ownerAccounts=[],inventoryProducts=[];
 let recapLoadErrors=[];
-$("date").value=today();
+if($("date"))$("date").value=nowLocalIso();
 if($("filterDay"))$("filterDay").value=today();
+if($("filterMonth"))$("filterMonth").value=today().slice(0,7);
 if($("recapDate"))$("recapDate").value=today();
 if($("recapWeekDate"))$("recapWeekDate").value=today();
 if($("recapMonth"))$("recapMonth").value=today().slice(0,7);
 
 function updatePeriodFilterUI(){
- const mode=$("periodMode")?.value||"all";
+ const mode=$("periodMode")?.value||"daily";
  const dayWrap=$("filterDayWrap");
  const monthWrap=$("filterMonthWrap");
  if(dayWrap)dayWrap.style.display=mode==="daily"?"block":"none";
@@ -166,7 +177,11 @@ function updatePeriodFilterUI(){
  if(mode==="daily"&&$("filterDay")&&!$("filterDay").value){
   $("filterDay").value=today();
  }
+ if(mode==="monthly"&&$("filterMonth")&&!$("filterMonth").value){
+  $("filterMonth").value=today().slice(0,7);
+ }
 }
+updatePeriodFilterUI();
 
 function updateRecapPeriodFilterUI(){
  const mode=$("recapPeriodMode")?.value||"daily";
@@ -204,19 +219,42 @@ function dateInWita(value){
  return `${parts.find(part=>part.type==="year").value}-${parts.find(part=>part.type==="month").value}-${parts.find(part=>part.type==="day").value}`;
 }
 function render(){
- let all=allCash(),income=0,expense=0,balance=0;
- all.forEach(e=>{
+ const mode=$("periodMode")?.value||"daily";
+ const selectedDay=$("filterDay")?.value||today();
+ const selectedMonth=$("filterMonth")?.value||today().slice(0,7);
+ const isDaily=mode==="daily";
+
+ const isMatchPeriod=dateStr=>{
+  const wita=dateInWita(dateStr);
+  if(!wita)return false;
+  return isDaily?wita===selectedDay:wita.slice(0,7)===selectedMonth;
+ };
+
+ let all=allCash();
+ let periodCash=all.filter(e=>isMatchPeriod(e.date));
+
+ let income=0,expense=0,balance=0;
+ periodCash.forEach(e=>{
   let n=+e.amount||0;
   if(e.type==="pengeluaran"){expense+=n;balance-=n}else{income+=n;balance+=n}
  });
+
+ const periodLabel=isDaily?"(Harian)":"(Bulanan)";
+ if($("statSaldoLabel"))$("statSaldoLabel").textContent=`Saldo Kas ${periodLabel}`;
+ if($("statIncomeLabel"))$("statIncomeLabel").textContent=`Pemasukan ${periodLabel}`;
+ if($("statExpenseLabel"))$("statExpenseLabel").textContent=`Pengeluaran ${periodLabel}`;
+ if($("statTrxLabel"))$("statTrxLabel").textContent=`Transaksi ${periodLabel}`;
+
  $("saldo").textContent=rp(balance);
  $("income").textContent=rp(income);
  $("expense").textContent=rp(expense);
- $("trx").textContent=new Set(bookkeeping.sales.map(sale=>sale.sale_id).filter(Boolean)).size;
 
- // 1. Hitung saldo berjalan secara kronologis (dari transaksi awal ke akhir)
+ const periodSales=bookkeeping.sales.filter(sale=>isMatchPeriod(sale.date));
+ $("trx").textContent=new Set(periodSales.map(sale=>sale.sale_id).filter(Boolean)).size;
+
+ // 1. Hitung saldo berjalan secara kronologis untuk periode terpilih
  let run=0;
- const entriesWithBalance=all.map(e=>{
+ const entriesWithBalance=periodCash.map(e=>{
   run+=e.type==="pengeluaran"?-(+e.amount||0):(+e.amount||0);
   return{
    entry:e,
@@ -229,21 +267,9 @@ function render(){
  const sortedEntries=entriesWithBalance.slice().reverse();
 
  const q=$("search").value.toLowerCase().trim();
- const mode=$("periodMode")?.value||"all";
- const selectedDay=$("filterDay")?.value||"";
- const selectedMonth=$("month")?.value||"all";
-
  const rows=[];
  sortedEntries.forEach(item=>{
   const e=item.entry;
-  const wita=item.witaDate;
-
-  // Filter waktu (Harian / Bulanan / Semua)
-  if(mode==="daily"){
-   if(selectedDay&&wita!==selectedDay)return;
-  }else if(mode==="monthly"){
-   if(selectedMonth!=="all"&&wita.slice(0,7)!==selectedMonth)return;
-  }
 
   // Filter pencarian teks
   if(q){
@@ -264,9 +290,6 @@ function render(){
  $("empty").style.display=rows.length?"none":"block";
 
  let months=[...new Set(all.map(e=>dateInWita(e.date).slice(0,7)).filter(Boolean))].sort().reverse();
- let opt=[...$("month").options].map(x=>x.value);
- months.forEach(m=>{if(!opt.includes(m)){let o=document.createElement("option");o.value=m;o.textContent=m;$("month").appendChild(o)}});
-
  let g={};
  all.forEach(e=>{let m=dateInWita(e.date).slice(0,7);if(!m)return;if(!g[m])g[m]={i:0,o:0};if(e.type==="pengeluaran")g[m].o+=+e.amount;else g[m].i+=+e.amount});
  $("months").innerHTML=months.map(m=>`<div class="month"><b>${m}</b><strong>${rp(g[m].i-g[m].o)}</strong><small>Masuk ${rp(g[m].i)} · Keluar ${rp(g[m].o)}</small></div>`).join("");
@@ -571,11 +594,26 @@ async function loadBookkeeping(){
  populateRecapOwnerFilter();
  render();
 }
-$("add").onclick=()=>{if(!isManager)return;let d=$("date").value,t=$("type").value,desc=$("desc").value.trim(),amount=+$("amount").value;if(!d||!desc||!amount)return toast("Lengkapi data");const entry={id:"MAN-"+Date.now(),date:d,type:t,desc,amount};cash.push(entry);save(STORE.cash,cash);bookkeeping.cash.push({user_id:KasirAuth.current()?.id,entry});$("desc").value="";$("amount").value="";render();toast("Catatan kas tersimpan")};
+$("add").onclick=()=>{
+ if(!isManager)return;
+ let dVal=$("date").value,t=$("type").value,desc=$("desc").value.trim(),amount=+$("amount").value;
+ if(!dVal||!desc||!amount)return toast("Lengkapi data");
+ let isoDate=new Date(dVal).toISOString();
+ const entry={id:"MAN-"+Date.now(),date:isoDate,type:t,desc,amount};
+ cash.push(entry);
+ save(STORE.cash,cash);
+ bookkeeping.cash.push({user_id:KasirAuth.current()?.id,entry});
+ $("desc").value="";
+ $("amount").value="";
+ $("date").value=nowLocalIso();
+ render();
+ toast("Catatan kas tersimpan");
+};
 $("search").oninput=render;
 $("periodMode").onchange=()=>{updatePeriodFilterUI();render()};
 $("filterDay").onchange=render;
-$("month").onchange=render;
+if($("filterMonth"))$("filterMonth").onchange=render;
+if($("month"))$("month").onchange=render;
 $("recapPeriodMode").onchange=()=>{updateRecapPeriodFilterUI();renderConsignmentRecap()};
 $("recapDate").onchange=renderConsignmentRecap;
 $("recapWeekDate").onchange=renderConsignmentRecap;
@@ -583,9 +621,19 @@ $("recapMonth").onchange=renderConsignmentRecap;
 $("recapOwnerFilter").onchange=renderConsignmentRecap;
 $("export").onclick=()=>{
  if(!isManager)return;
+ const mode=$("periodMode")?.value||"daily";
+ const selectedDay=$("filterDay")?.value||today();
+ const selectedMonth=$("filterMonth")?.value||today().slice(0,7);
+ const isDaily=mode==="daily";
+ const isMatchPeriod=dateStr=>{
+  const wita=dateInWita(dateStr);
+  if(!wita)return false;
+  return isDaily?wita===selectedDay:wita.slice(0,7)===selectedMonth;
+ };
+ let filteredCash=allCash().filter(e=>isMatchPeriod(e.date));
  let csv="Tanggal,ID,Keterangan,Jenis,Metode Pembayaran,Masuk,Keluar,Saldo\n";
  let run=0;
- const entriesWithBalance=allCash().map(e=>{
+ const entriesWithBalance=filteredCash.map(e=>{
   run+=e.type==="pengeluaran"?-(+e.amount||0):(+e.amount||0);
   return {entry:e,balanceAfter:run};
  });
@@ -594,11 +642,11 @@ $("export").onclick=()=>{
   const m=getPaymentMethodText(e);
   const masuk=e.type==="pengeluaran"?"0":String(e.amount||0);
   const keluar=e.type==="pengeluaran"?String(e.amount||0):"0";
-  csv+=`"${e.date}","${e.id}","${String(e.desc).replace(/"/g,'""')}","${e.type}","${m}","${masuk}","${keluar}","${item.balanceAfter}"\n`;
+  csv+=`"${fmtDateTime(e.date)}","${e.id}","${String(e.desc).replace(/"/g,'""')}","${e.type}","${m}","${masuk}","${keluar}","${item.balanceAfter}"\n`;
  });
  let a=document.createElement("a");
  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
- a.download="buku-kas.csv";
+ a.download=`buku-kas-${isDaily?selectedDay:selectedMonth}.csv`;
  a.click();
 };
 window.addEventListener("storage",()=>{cash=load(STORE.cash,[]);void loadBookkeeping()});
