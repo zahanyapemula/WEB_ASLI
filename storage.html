@@ -763,10 +763,18 @@
             <div class="title">
                 <h3>Daftar Penyimpanan</h3><span id="lowTag" class="tag">0 stok rendah</span>
             </div>
-            <div style="max-width:360px;margin-bottom:14px"><label class="label" for="ownerFilter">Filter Owner / UMKM
-                    Penitip</label><select id="ownerFilter">
-                    <option value="">Semua Owner</option>
-                </select></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end">
+                <div style="flex:2;min-width:200px">
+                    <label class="label" for="storageSearch">Cari Produk / UMKM</label>
+                    <input id="storageSearch" type="search" placeholder="Cari nama, kode, barcode, atau nama UMKM" autocomplete="off">
+                </div>
+                <div style="flex:1;min-width:180px">
+                    <label class="label" for="ownerFilter">Filter UMKM</label>
+                    <select id="ownerFilter">
+                        <option value="">Semua UMKM</option>
+                    </select>
+                </div>
+            </div>
             <div class="table">
                 <table>
                     <thead>
@@ -937,7 +945,7 @@
                 const newHash = [...groups].map(([c,l])=>c+'='+l).sort().join('\x00');
                 if (newHash === _lastOwnerFilterHash) return;
                 _lastOwnerFilterHash = newHash;
-                select.innerHTML = '<option value="">Semua Owner</option>' + [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`).join('');
+                select.innerHTML = '<option value="">Semua UMKM</option>' + [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([code, label]) => `<option value="${esc(code)}">${esc(label)}</option>`).join('');
                 if ([...select.options].some(o => o.value === selected)) select.value = selected;
             }
             $('product').addEventListener('change', e => { selectedId = e.target.value; storageFormDirty = false; loadForm() });
@@ -959,6 +967,7 @@
             $('owner').addEventListener('change', () => { $('ownerCode').value = ownerMetadata($('owner').value)?.code || '' });
             ['owner', 'stock', 'reorder', 'ingredients'].forEach(id => $(id).addEventListener('input', () => { storageFormDirty = true }));
             $('ownerFilter').addEventListener('change', render);
+            if ($('storageSearch')) $('storageSearch').addEventListener('input', render);
             async function saveOwnerStorage() {
                 const p = products.find(x => x.id === selectedId);
                 if (!p) return toast('Pilih produk terlebih dahulu.');
@@ -1105,13 +1114,20 @@
             let _lastStorageTableHash = '';
             function render() {
                 const rows = $('rows'), alerts = $('alerts'), filter = $('ownerFilter').value;
+                const query = ($('storageSearch')?.value || '').trim().toLocaleLowerCase('id-ID');
                 let low = 0;
-                let visible = products.filter(p => !filter || String(p.ownerCode || '') === filter);
+                let visible = products.filter(p => {
+                    const matchFilter = !filter || String(p.ownerCode || '') === filter;
+                    if (!matchFilter) return false;
+                    if (!query) return true;
+                    return [p.name, p.code, p.productCode, p.barcode, p.owner, p.ownerCode]
+                        .some(value => String(value || '').toLocaleLowerCase('id-ID').includes(query));
+                });
                 if (isUmkm && KasirAuth.profile?.owner_code) {
                     const myCode = String(KasirAuth.profile.owner_code);
                     visible = visible.filter(p => String(p.ownerCode || '') === myCode);
                 }
-                const tableHash = filter + '|' + visible.map(p => `${p.id}:${p.stock}:${p.reorder}:${p.ownerCode}:${p.ingredients?.length}`).join(';');
+                const tableHash = `${query}|${filter}|` + visible.map(p => `${p.id}:${p.stock}:${p.reorder}:${p.ownerCode}:${p.ingredients?.length}`).join(';');
                 if (tableHash === _lastStorageTableHash) {
                     return;
                 }
