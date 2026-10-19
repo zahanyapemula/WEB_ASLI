@@ -510,6 +510,12 @@ function render(){
   const owner=String(product.owner||"").trim()||"Belum diatur";
   return searchable&&(!ownerFilter.value||owner===ownerFilter.value);
  });
+ filteredProducts.sort((a,b)=>{
+  const codeA=String(a.ownerCode||"~~~~");
+  const codeB=String(b.ownerCode||"~~~~");
+  if(codeA!==codeB)return codeA.localeCompare(codeB);
+  return String(a.name||"").localeCompare(String(b.name||""),"id");
+ });
  $("count").textContent=filteredProducts.length+" dari "+products.length+" produk";
  $("empty").textContent=products.length?"Produk tidak ditemukan.":"Belum ada produk.";
  $("empty").style.display=filteredProducts.length?"none":"block";
