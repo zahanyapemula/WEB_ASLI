@@ -112,7 +112,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 <div><label class="label">Keterangan</label><input id="desc" placeholder="Contoh: Modal awal toko"></div><div><label class="label">Nominal (Rp)</label><input id="amount" type="number" min="1" placeholder="500000"></div>
 <div class="full"><button id="add" class="btn primary" style="width:100%">＋ Simpan Catatan</button></div></div></div>
 <div class="card" style="margin-top:16px"><div class="title"><h3>Buku Kas</h3><button id="export" class="btn yellow">⬇️ Export CSV</button></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><div style="flex:2;min-width:180px"><input id="search" placeholder="Cari transaksi (keterangan, ID, metode)..."></div><div style="display:flex;gap:8px;flex:3;min-width:280px;align-items:center;flex-wrap:wrap"><div style="min-width:130px;flex:1"><select id="periodMode" aria-label="Pilihan periode"><option value="daily" selected>Per Hari (Harian)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="filterDayWrap" style="display:block;min-width:130px;flex:1"><input id="filterDay" type="date" aria-label="Pilih tanggal"></div><div id="filterMonthWrap" style="display:none;min-width:130px;flex:1"><input id="filterMonth" type="month" aria-label="Pilih bulan"></div></div></div><div class="table"><table class="ledger-table"><thead><tr><th>Tanggal</th><th>Keterangan</th><th>Jenis</th><th>Metode</th><th>Masuk</th><th>Keluar</th><th>Saldo</th><th style="text-align:center">Aksi</th></tr></thead><tbody id="ledger"></tbody></table><div id="empty" class="empty">Belum ada catatan.</div></div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Rekapan UMKM</h3><span class="tag" id="recapModeTag">Harian</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end"><div style="min-width:140px;flex:1"><label class="label" for="recapPeriodMode">Periode Waktu</label><select id="recapPeriodMode"><option value="daily" selected>Per Hari (Harian)</option><option value="weekly">Per Minggu (Mingguan)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="recapDayWrap" style="min-width:140px;flex:1"><label class="label" for="recapDate">Pilih Tanggal</label><input id="recapDate" type="date"></div><div id="recapWeekWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapWeekDate">Pilih Tanggal Mulai (7 Hari)</label><input id="recapWeekDate" type="date"></div><div id="recapMonthWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapMonth">Pilih Bulan</label><input id="recapMonth" type="month"></div><div id="recapOwnerFilterWrap" style="min-width:180px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapSummaryBanner" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:var(--soft2);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:12px"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Periode Terpilih</div><div id="recapPeriodLabel" style="font-size:13px;font-weight:800;color:#173120">—</div></div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div><span class="small" style="display:block">Total Dititip</span><b id="recapGrandDeposited" style="font-size:13px;color:#173120">0 unit</b></div><div><span class="small" style="display:block">Total Laku</span><b id="recapGrandSold" style="font-size:13px;color:#328f46">0 unit</b></div><div><span class="small" style="display:block">Total Pendapatan (HPP / Modal)</span><b id="recapGrandRevenue" class="money in" style="font-size:14px">Rp 0</b></div></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:12px"></div><div id="recapContainer"></div><div id="recapEmpty" class="empty" style="display:none">Belum ada produk titipan atau penjualan pada periode ini.</div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Rekapan UMKM</h3><span class="tag" id="recapModeTag">Harian</span></div><div class="filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end"><div style="min-width:140px;flex:1"><label class="label" for="recapPeriodMode">Periode Waktu</label><select id="recapPeriodMode"><option value="daily" selected>Per Hari (Harian)</option><option value="weekly">Per Minggu (Mingguan)</option><option value="monthly">Per Bulan (Bulanan)</option></select></div><div id="recapDayWrap" style="min-width:140px;flex:1"><label class="label" for="recapDate">Pilih Tanggal</label><input id="recapDate" type="date"></div><div id="recapWeekWrap" style="display:none;min-width:260px;flex:2;gap:8px"><div style="flex:1;min-width:125px"><label class="label" for="recapWeekStartDate">Tanggal Acuan (Mulai)</label><input id="recapWeekStartDate" type="date"></div><div style="flex:1;min-width:125px"><label class="label" for="recapWeekEndDate">Sampai Dengan Tanggal</label><input id="recapWeekEndDate" type="date"></div></div><div id="recapMonthWrap" style="display:none;min-width:140px;flex:1"><label class="label" for="recapMonth">Pilih Bulan</label><input id="recapMonth" type="month"></div><div id="recapOwnerFilterWrap" style="min-width:180px;flex:1"><label class="label" for="recapOwnerFilter">Filter UMKM</label><select id="recapOwnerFilter"><option value="">Semua UMKM</option></select></div></div><div id="recapSummaryBanner" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;background:var(--soft2);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:12px"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Periode Terpilih</div><div id="recapPeriodLabel" style="font-size:13px;font-weight:800;color:#173120">—</div></div><div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div><span class="small" style="display:block">Total Dititip</span><b id="recapGrandDeposited" style="font-size:13px;color:#173120">0 unit</b></div><div><span class="small" style="display:block">Total Laku</span><b id="recapGrandSold" style="font-size:13px;color:#328f46">0 unit</b></div><div><span class="small" style="display:block">Total Pendapatan (HPP / Modal)</span><b id="recapGrandRevenue" class="money in" style="font-size:14px">Rp 0</b></div></div></div><div id="recapNotice" class="small" role="status" style="margin-bottom:12px"></div><div id="recapContainer"></div><div id="recapEmpty" class="empty" style="display:none">Belum ada produk titipan atau penjualan pada periode ini.</div></div>
 </div>
 <div>
 <div class="card"><div class="title"><h3>Rekap Bulanan</h3><span class="tag">Otomatis</span></div><div id="months" class="months"></div><div id="monthEmpty" class="empty">Belum ada data.</div></div>
@@ -166,7 +166,12 @@ if($("date"))$("date").value=nowLocalIso();
 if($("filterDay"))$("filterDay").value=today();
 if($("filterMonth"))$("filterMonth").value=today().slice(0,7);
 if($("recapDate"))$("recapDate").value=today();
-if($("recapWeekDate"))$("recapWeekDate").value=today();
+if($("recapWeekStartDate"))$("recapWeekStartDate").value=today();
+if($("recapWeekEndDate")){
+ const d=new Date(`${today()}T12:00:00+08:00`);
+ const endD=new Date(d.getTime()+6*86400000);
+ $("recapWeekEndDate").value=dateInWita(endD);
+}
 if($("recapMonth"))$("recapMonth").value=today().slice(0,7);
 
 function updatePeriodFilterUI(){
@@ -190,7 +195,7 @@ function updateRecapPeriodFilterUI(){
  const weekWrap=$("recapWeekWrap");
  const monthWrap=$("recapMonthWrap");
  if(dayWrap)dayWrap.style.display=mode==="daily"?"block":"none";
- if(weekWrap)weekWrap.style.display=mode==="weekly"?"block":"none";
+ if(weekWrap)weekWrap.style.display=mode==="weekly"?"flex":"none";
  if(monthWrap)monthWrap.style.display=mode==="monthly"?"block":"none";
  const tag=$("recapModeTag");
  if(tag)tag.textContent=mode==="daily"?"Harian":mode==="weekly"?"Mingguan":"Bulanan";
@@ -345,12 +350,15 @@ function getRecapDateRange(){
   };
  }
  if(mode==="weekly"){
-  const ref=$("recapWeekDate")?.value||today();
-  const startMs=Date.parse(`${ref}T00:00:00+08:00`);
-  const endDayDate=new Date(startMs+6*86400000);
-  const endStr=dateInWita(endDayDate);
+  const startStr=$("recapWeekStartDate")?.value||$("recapWeekDate")?.value||today();
+  let endStr=$("recapWeekEndDate")?.value||startStr;
+  if(endStr<startStr){
+   endStr=startStr;
+   if($("recapWeekEndDate"))$("recapWeekEndDate").value=startStr;
+  }
+  const startMs=Date.parse(`${startStr}T00:00:00+08:00`);
   const endMs=Date.parse(`${endStr}T23:59:59.999+08:00`)+1;
-  const label=`${fmtDate(`${ref}T12:00:00+08:00`)} s.d. ${fmtDate(`${endStr}T12:00:00+08:00`)}`;
+  const label=`${fmtDate(`${startStr}T12:00:00+08:00`)} s.d. ${fmtDate(`${endStr}T12:00:00+08:00`)}`;
   return {
    mode,
    label:`Mingguan (${label})`,
@@ -359,7 +367,7 @@ function getRecapDateRange(){
    endMs,
    isMatchSale:(dateStr)=>{
     const w=dateInWita(dateStr);
-    return w>=ref&&w<=endStr;
+    return w>=startStr&&w<=endStr;
    },
    isMatchMovement:(ms)=>ms>=startMs&&ms<endMs
   };
@@ -655,7 +663,25 @@ if($("filterMonth"))$("filterMonth").onchange=render;
 if($("month"))$("month").onchange=render;
 $("recapPeriodMode").onchange=()=>{updateRecapPeriodFilterUI();renderConsignmentRecap()};
 $("recapDate").onchange=renderConsignmentRecap;
-$("recapWeekDate").onchange=renderConsignmentRecap;
+if($("recapWeekStartDate")){
+ $("recapWeekStartDate").onchange=()=>{
+  const s=$("recapWeekStartDate").value;
+  if(s&&$("recapWeekEndDate")){
+   const d=new Date(`${s}T12:00:00+08:00`);
+   const endD=new Date(d.getTime()+6*86400000);
+   $("recapWeekEndDate").value=dateInWita(endD);
+  }
+  renderConsignmentRecap();
+ };
+}
+if($("recapWeekEndDate")){
+ $("recapWeekEndDate").onchange=()=>{
+  if($("recapWeekStartDate")&&$("recapWeekEndDate").value<$("recapWeekStartDate").value){
+   $("recapWeekEndDate").value=$("recapWeekStartDate").value;
+  }
+  renderConsignmentRecap();
+ };
+}
 $("recapMonth").onchange=renderConsignmentRecap;
 $("recapOwnerFilter").onchange=renderConsignmentRecap;
 $("export").onclick=()=>{
