@@ -497,14 +497,40 @@
       .eq('key', 'products')
       .in('user_id', tenantIds);
     if (error) throw error;
+    const storeCode = String(currentProfile?.store_code || currentUser?.user_metadata?.store_code || '').trim();
+    let foreignUmkmCodes = new Set();
+    if (storeCode) {
+      try {
+        const { data: foreignUmkms } = await client
+          .from('user_profiles')
+          .select('owner_code')
+          .eq('role', 'umkm')
+          .not('store_code', 'is', null)
+          .neq('store_code', storeCode);
+        if (Array.isArray(foreignUmkms)) {
+          foreignUmkms.forEach(u => {
+            if (u.owner_code) foreignUmkmCodes.add(String(u.owner_code));
+          });
+        }
+      } catch (e) {
+        console.warn('Gagal memuat profil UMKM toko lain:', e);
+      }
+    }
+
     const products = [];
     loadedProductTenantIds.clear();
+    let hadForeignProducts = false;
     for (const row of data || []) {
       loadedProductTenantIds.add(row.user_id);
       if (Array.isArray(row.value)) {
         for (const product of row.value) {
           if (product._tenantUserId && !tenantIds.includes(product._tenantUserId)) {
-            continue; // Buang produk yang berasal dari tenant toko lain
+            hadForeignProducts = true;
+            continue;
+          }
+          if (product.ownerCode && foreignUmkmCodes.has(String(product.ownerCode))) {
+            hadForeignProducts = true;
+            continue;
           }
           products.push({ ...product, _tenantUserId: product._tenantUserId || row.user_id });
         }
@@ -512,6 +538,19 @@
     }
     if (!loadedProductTenantIds.has(currentUser.id)) loadedProductTenantIds.add(currentUser.id);
     originalSetItem(localKey('products'), JSON.stringify(products));
+
+    // Jika ditemukan produk asing di database toko ini, bersihkan database secara otomatis
+    if (hadForeignProducts && currentUser.id) {
+      try {
+        await client.from('user_data').upsert({
+          user_id: currentUser.id,
+          key: 'products',
+          value: products.filter(p => !p._tenantUserId || p._tenantUserId === currentUser.id).map(({ _tenantUserId, ...p }) => p),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,key' });
+      } catch (_) {}
+    }
+
     return products;
   }
 

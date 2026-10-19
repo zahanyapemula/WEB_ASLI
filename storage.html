@@ -908,7 +908,6 @@
             function populateOwners() {
                 const select = $('owner'), selected = select.value, names = new Map();
                 ownerAccounts.forEach(account => { const name = cleanOwner(account.owner_name); if (name) names.set(name.toLowerCase(), { name, code: account.owner_code || '' }) });
-                owners.forEach(owner => { const name = cleanOwner(owner.name); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: owner.code || '' }) });
                 products.forEach(product => { const name = cleanOwner(product.owner); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), { name, code: product.ownerCode || '' }) });
                 if (KasirAuth.isUmkm && KasirAuth.profile?.owner_name) { const name = cleanOwner(KasirAuth.profile.owner_name); names.set(name.toLowerCase(), { name, code: KasirAuth.profile.owner_code || '' }) }
                 const sorted = [...names.values()].sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));

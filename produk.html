@@ -210,8 +210,7 @@ function ownerCodeFor(name){
  const account=ownerAccounts.find(item=>cleanOwner(item.owner_name).toLowerCase()===clean);
  if(account?.owner_code)return account.owner_code;
  if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_code)return KasirAuth.profile.owner_code;
- const existing=owners.find(owner=>cleanOwner(owner.name).toLowerCase()===clean)
-  ||products.find(product=>cleanOwner(product.owner).toLowerCase()===clean);
+ const existing=products.find(product=>cleanOwner(product.owner).toLowerCase()===clean);
  if(existing?.code||existing?.ownerCode)return existing.code||existing.ownerCode;
  return "";
 }
@@ -223,7 +222,6 @@ function generateOwnerCode(name){
  if(existingCode)return String(existingCode);
  const usedCodes=new Set([
   ...ownerAccounts.map(owner=>String(owner.owner_code||"")),
-  ...owners.map(owner=>String(owner.code||owner.ownerCode||"")),
   ...products.map(product=>String(product.ownerCode||product.owner_code||""))
  ]);
  const availableCodes=Array.from({length:10000},(_,value)=>String(value).padStart(4,"0"))
@@ -252,7 +250,6 @@ function registerOwner(name,code){
     return null;
   }
   const conflictingOwner=ownerAccounts.find(item=>String(item.owner_code)===ownerCode&&cleanOwner(item.owner_name).toLowerCase()!==ownerName.toLowerCase())
-    ||owners.find(item=>String(item.code||item.ownerCode)===ownerCode&&cleanOwner(item.name).toLowerCase()!==ownerName.toLowerCase())
     ||products.find(item=>String(item.ownerCode||item.owner_code)===ownerCode&&cleanOwner(item.owner).toLowerCase()!==ownerName.toLowerCase());
   if(conflictingOwner){toast("Kode UMKM ini sudah dipakai owner lain. Generate kode baru.");$("generateOwnerCode").focus();return null;}
   const owner={
@@ -272,7 +269,6 @@ function syncOwnerCodeFromName(){
 function renderOwnerSuggestions(){
   const names=new Map();
   ownerAccounts.forEach(owner=>{if(owner.owner_name)names.set(cleanOwner(owner.owner_name).toLowerCase(),cleanOwner(owner.owner_name))});
-  owners.forEach(owner=>{if(owner.name)names.set(cleanOwner(owner.name).toLowerCase(),cleanOwner(owner.name))});
   products.forEach(product=>{if(product.owner)names.set(cleanOwner(product.owner).toLowerCase(),cleanOwner(product.owner))});
   if(KasirAuth.isUmkm&&KasirAuth.profile?.owner_name)names.set(cleanOwner(KasirAuth.profile.owner_name).toLowerCase(),cleanOwner(KasirAuth.profile.owner_name));
   const query=cleanOwner($("productOwner").value).toLowerCase();
