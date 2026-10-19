@@ -337,7 +337,7 @@ $("productOwner").addEventListener("focus",openOwnerSuggestions);
  }
  window.addEventListener('focus', refreshProdukData);
  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void refreshProdukData(); });
- window.setInterval(() => { if (document.visibilityState === 'visible') void refreshProdukData(); }, 5_000);
+ window.setInterval(() => { if (document.visibilityState === 'visible') void refreshProdukData(); }, 15_000);
 renderOwnerSuggestions();
 function randomDigits(length){
   let out = "";
@@ -496,19 +496,27 @@ $("name").addEventListener("keydown",e=>{if(e.key==="Enter"){$("price").focus()}
 $("price").addEventListener("keydown",e=>{if(e.key==="Enter"){$("cost").focus()}});
 $("cost").addEventListener("keydown",e=>{if(e.key==="Enter")addProduct()});
 
-function render(){
- const selectedOwner=$("ownerFilter").value;
+let _lastOwnerFilterHash = '';
+function rebuildOwnerFilter(){
  const ownerNames=[...new Set(products.map(product=>String(product.owner||"").trim()||"Belum diatur"))].sort((a,b)=>a.localeCompare(b,"id"));
+ const newHash = ownerNames.join('\x00');
+ if (newHash === _lastOwnerFilterHash) return;
+ _lastOwnerFilterHash = newHash;
  const ownerFilter=$("ownerFilter");
+ const selectedOwner=ownerFilter.value;
  ownerFilter.replaceChildren(new Option("Semua owner",""));
  ownerNames.forEach(owner=>ownerFilter.add(new Option(owner,owner)));
  ownerFilter.value=ownerNames.includes(selectedOwner)?selectedOwner:"";
+}
+function render(){
+ rebuildOwnerFilter();
  const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
+ const selectedOwner=$("ownerFilter").value;
  const filteredProducts=products.filter(product=>{
   const searchable=[product.name,product.code,product.productCode,product.barcode]
    .some(value=>String(value||"").toLocaleLowerCase("id-ID").includes(query));
   const owner=String(product.owner||"").trim()||"Belum diatur";
-  return searchable&&(!ownerFilter.value||owner===ownerFilter.value);
+  return searchable&&(!selectedOwner||owner===selectedOwner);
  });
  filteredProducts.sort((a,b)=>{
   const codeA=String(a.ownerCode||"~~~~");
