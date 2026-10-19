@@ -345,12 +345,18 @@
 
       cart.forEach((item) => {
         const maxStock = Number(item.stock || 0);
+        const ownerLabel = item.owner ? String(item.owner) : 'Toko Utama';
+        const ownerCodeBadge = item.ownerCode ? ` (${esc(item.ownerCode)})` : '';
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>
-            <b>${esc(item.name)}</b>
-            <div class="small">Kode Produk: ${esc(item.code || item.productCode || '—')}</div>
-            <div class="small">Barcode: ${esc(item.barcode)}</div>
+            <div style="font-weight:700;font-size:14px;color:#173120">${esc(item.name)}</div>
+            <div style="margin:3px 0">
+              <span style="display:inline-block;padding:2px 7px;border-radius:6px;background:var(--soft2,#eaf6ea);border:1px solid #c2e2c2;color:#1e5e29;font-size:12.5px;font-weight:800">
+                🏪 UMKM: ${esc(ownerLabel)}${ownerCodeBadge}
+              </span>
+            </div>
+            <div class="small" style="color:var(--muted)">Kode: ${esc(item.code || item.productCode || '—')} · Barcode: ${esc(item.barcode)}</div>
           </td>
           <td>
             <div class="qty-ctrl">
@@ -444,16 +450,25 @@
       if (!box) return;
       const query = $('quickSearch').value.trim().toLocaleLowerCase('id-ID');
       const visibleProducts = products.filter(product =>
-        [product.name, product.code, product.productCode, product.barcode]
+        [product.name, product.code, product.productCode, product.barcode, product.owner, product.ownerCode]
           .some(value => String(value || '').toLocaleLowerCase('id-ID').includes(query))
       );
-      box.innerHTML = visibleProducts.map(product => `
+      box.innerHTML = visibleProducts.map(product => {
+        const ownerLabel = product.owner ? String(product.owner) : 'Toko Utama';
+        const ownerCodeBadge = product.ownerCode ? ` (${esc(product.ownerCode)})` : '';
+        return `
         <button type="button" class="product" style="text-align:left;cursor:pointer" data-code="${esc(product.barcode)}">
           <h4>${esc(product.name)}</h4>
           <div class="price">${rp(product.price)}</div>
-          <div class="small">Kode Produk: ${esc(product.code || product.productCode || '—')}</div>
+          <div style="margin:4px 0">
+            <span style="display:inline-block;padding:2px 7px;border-radius:6px;background:var(--soft2,#eaf6ea);border:1px solid #c2e2c2;color:#1e5e29;font-size:12px;font-weight:800">
+              🏪 UMKM: ${esc(ownerLabel)}${ownerCodeBadge}
+            </span>
+          </div>
+          <div class="small">Kode: ${esc(product.code || product.productCode || '—')}</div>
           <div class="small">Stok ${Number(product.stock || 0)} · Barcode: ${esc(product.barcode)}</div>
-        </button>`).join('');
+        </button>`;
+      }).join('');
       if (!visibleProducts.length) {
         const empty = document.createElement('div');
         empty.className = 'empty';
@@ -602,14 +617,17 @@
           date: sale.date,
           type: 'penjualan',
           amount: transactionTotal,
-          desc: `Penjualan [${methodLabel}] ` + soldItems.map(item => `${item.name} x${item.qty}`).join(', '),
+          desc: `Penjualan [${methodLabel}] ` + soldItems.map(item => `${item.name}${item.owner ? ` [UMKM: ${item.owner}]` : ''} x${item.qty}`).join(', '),
           saleId: saleId,
           paymentMethod: paymentMethod
         };
 
-        // Buat baris struk langsung dari soldItems agar semua produk yang dibeli tercatat lengkap
+        // Buat baris struk langsung dari soldItems agar semua produk yang dibeli tercatat lengkap beserta pemiliknya
         const rows = soldItems.map(item =>
-          `<div style="display:flex;justify-content:space-between"><span>${esc(item.name)} x${item.qty}</span><span>${rp(item.total)}</span></div>`
+          `<div style="margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between"><span><b>${esc(item.name)}</b> x${item.qty}</span><span>${rp(item.total)}</span></div>
+            ${item.owner ? `<div style="font-size:10px;color:#555">UMKM: ${esc(item.owner)}</div>` : ''}
+          </div>`
         ).join('');
 
         const receiptScript = '<' + '/script>';
