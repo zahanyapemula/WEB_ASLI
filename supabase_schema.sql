@@ -1006,7 +1006,7 @@ begin
   insert into public.user_data (user_id, key, value, updated_at)
   values (target_user_id, 'sales', jsonb_build_array(p_sale), now())
   on conflict (user_id, key) do update
-  set value = (
+  set value = coalesce(
     case
       when jsonb_typeof(user_data.value) = 'array' then
         case
@@ -1017,7 +1017,8 @@ begin
           else user_data.value || jsonb_build_array(p_sale)
         end
       else jsonb_build_array(p_sale)
-    end
+    end,
+    jsonb_build_array(p_sale)
   ),
   updated_at = now()
   returning value into final_sales;
@@ -1027,7 +1028,7 @@ begin
     insert into public.user_data (user_id, key, value, updated_at)
     values (target_user_id, 'cash', jsonb_build_array(p_cash), now())
     on conflict (user_id, key) do update
-    set value = (
+    set value = coalesce(
       case
         when jsonb_typeof(user_data.value) = 'array' then
           case
@@ -1039,7 +1040,8 @@ begin
             else user_data.value || jsonb_build_array(p_cash)
           end
         else jsonb_build_array(p_cash)
-      end
+      end,
+      jsonb_build_array(p_cash)
     ),
     updated_at = now()
     returning value into final_cash;
@@ -1049,6 +1051,8 @@ begin
   if p_items is not null and jsonb_typeof(p_items) = 'array' then
     perform 1 from public.user_data d
     where d.key = 'products'
+      and jsonb_typeof(d.value) = 'array'
+      and jsonb_array_length(d.value) > 0
       and (
         d.user_id = target_user_id
         or (caller_store_code <> '' and d.user_id in (
@@ -1058,34 +1062,40 @@ begin
     for update;
 
     update public.user_data d
-    set value = (
-      select jsonb_agg(
-        case
-          when sold_calc.total_sold is not null and sold_calc.total_sold > 0 then
-            jsonb_set(
-              prod.value,
-              '{stock}',
-              to_jsonb(greatest(0, coalesce((prod.value ->> 'stock')::numeric, 0) - sold_calc.total_sold)),
-              true
-            )
-          else prod.value
-        end
-        order by prod.ordinality
-      )
-      from jsonb_array_elements(d.value) with ordinality as prod(value, ordinality)
-      left join lateral (
-        select sum((it.value ->> 'qty')::numeric) as total_sold
-        from jsonb_array_elements(p_items) as it(value)
-        where (it.value ->> 'id' is not null and it.value ->> 'id' = prod.value ->> 'id')
-           or (
-             nullif(trim(prod.value ->> 'barcode'), '') is not null
-             and nullif(trim(it.value ->> 'barcode'), '') is not null
-             and it.value ->> 'barcode' = prod.value ->> 'barcode'
-           )
-      ) sold_calc on true
+    set value = coalesce(
+      (
+        select jsonb_agg(
+          case
+            when sold_calc.total_sold is not null and sold_calc.total_sold > 0 then
+              jsonb_set(
+                prod.value,
+                '{stock}',
+                to_jsonb(greatest(0, coalesce((prod.value ->> 'stock')::numeric, 0) - sold_calc.total_sold)),
+                true
+              )
+            else prod.value
+          end
+          order by prod.ordinality
+        )
+        from jsonb_array_elements(case when jsonb_typeof(d.value) = 'array' then d.value else '[]'::jsonb end) with ordinality as prod(value, ordinality)
+        left join lateral (
+          select sum((it.value ->> 'qty')::numeric) as total_sold
+          from jsonb_array_elements(p_items) as it(value)
+          where (it.value ->> 'id' is not null and it.value ->> 'id' = prod.value ->> 'id')
+             or (
+               nullif(trim(prod.value ->> 'barcode'), '') is not null
+               and nullif(trim(it.value ->> 'barcode'), '') is not null
+               and it.value ->> 'barcode' = prod.value ->> 'barcode'
+             )
+        ) sold_calc on true
+      ),
+      d.value,
+      '[]'::jsonb
     ),
     updated_at = now()
     where d.key = 'products'
+      and jsonb_typeof(d.value) = 'array'
+      and jsonb_array_length(d.value) > 0
       and (
         d.user_id = target_user_id
         or (caller_store_code <> '' and d.user_id in (

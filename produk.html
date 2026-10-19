@@ -122,7 +122,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div>
 <div class="feature-summary"><strong>Alur singkat:</strong> Buat produk → atur owner dan stok di Storage → jual melalui Kasir → tinjau transaksi di Buku Kas dan laporan.</div>
 </div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, atau barcode produk" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan owner"><option value="">Semua owner</option></select></div><div class="small" style="margin-top:6px">Filter owner mencakup UMKM yang belum memiliki akun selama produknya sudah didaftarkan.</div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, barcode, atau nama UMKM" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan UMKM"><option value="">Semua UMKM</option></select></div><div class="small" style="margin-top:6px">Filter UMKM mencakup UMKM yang belum memiliki akun selama produknya sudah didaftarkan.</div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
 
 </div><div id="toast" class="toast"></div>
 <script>
@@ -524,7 +524,7 @@ function rebuildOwnerFilter(){
  _lastOwnerFilterHash = newHash;
  const ownerFilter=$("ownerFilter");
  const selectedOwner=ownerFilter.value;
- ownerFilter.replaceChildren(new Option("Semua owner",""));
+ ownerFilter.replaceChildren(new Option("Semua UMKM",""));
  ownerNames.forEach(owner=>ownerFilter.add(new Option(owner,owner)));
  ownerFilter.value=ownerNames.includes(selectedOwner)?selectedOwner:"";
 }
@@ -534,7 +534,7 @@ function render(){
  const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
  const selectedOwner=$("ownerFilter").value;
  const filteredProducts=products.filter(product=>{
-  const searchable=[product.name,product.code,product.productCode,product.barcode]
+  const searchable=[product.name,product.code,product.productCode,product.barcode,product.owner,product.ownerCode]
    .some(value=>String(value||"").toLocaleLowerCase("id-ID").includes(query));
   const owner=String(product.owner||"").trim()||"Belum diatur";
   return searchable&&(!selectedOwner||owner===selectedOwner);
