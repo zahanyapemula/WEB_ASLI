@@ -86,7 +86,39 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </nav></div></header>
 
 <div class="hero"><h2><span>Dashboard</span> Analisis Penjualan</h2><p>Lihat pola penjualan untuk mengetahui titik tertinggi, terendah, tren naik-turun, jam ramai, produk terlaris, dan estimasi keuntungan berdasarkan transaksi Kasir.</p><div class="note">📊 Semua visualisasi mengambil data otomatis dari transaksi yang sudah selesai di Kasir.</div></div>
-<div class="stats"><div class="stat"><div class="icon">💵</div><small>Omzet</small><strong id="revenue">Rp 0</strong></div><div class="stat"><div class="icon">📦</div><small>Unit Terjual</small><strong id="units">0</strong></div><div class="stat"><div class="icon">🏆</div><small>Produk Terlaris</small><strong id="top">—</strong></div><div class="stat yellow"><div class="icon">💡</div><small>Estimasi Laba Kotor</small><strong id="profit">Rp 0</strong></div></div>
+
+<div class="card" style="margin-top:16px;padding:16px 20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:26px">📅</div>
+      <div>
+        <div style="font-size:14px;font-weight:800">Filter Periode Analisis</div>
+        <div id="filterDesc" class="muted" style="font-size:11px;margin-top:2px">Menampilkan data omzet &amp; estimasi laba bersih</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="min-width:140px">
+        <select id="periodMode" aria-label="Mode Periode">
+          <option value="daily" selected>Per Hari (Harian)</option>
+          <option value="monthly">Per Bulan (Bulanan)</option>
+          <option value="all">Semua Waktu</option>
+        </select>
+      </div>
+      <div id="filterDayWrap" style="min-width:145px">
+        <input id="filterDate" type="date" aria-label="Pilih tanggal">
+      </div>
+      <div id="filterMonthWrap" style="display:none;min-width:145px">
+        <input id="filterMonth" type="month" aria-label="Pilih bulan">
+      </div>
+      <div style="display:flex;gap:6px">
+        <button id="btnToday" type="button" class="btn secondary" style="padding:9px 12px;font-size:11px" title="Lihat Penjualan Hari Ini">Hari Ini</button>
+        <button id="btnThisMonth" type="button" class="btn secondary" style="padding:9px 12px;font-size:11px" title="Lihat Penjualan Bulan Ini">Bulan Ini</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="stats"><div class="stat"><div class="icon">💵</div><small>Omzet</small><strong id="revenue">Rp 0</strong></div><div class="stat"><div class="icon">📦</div><small>Unit Terjual</small><strong id="units">0</strong></div><div class="stat"><div class="icon">🏆</div><small>Produk Terlaris</small><strong id="top">—</strong></div><div class="stat yellow"><div class="icon">💡</div><small>Estimasi Laba Bersih</small><strong id="profit">Rp 0</strong></div></div>
 <div class="grid">
 <div>
 <div class="card"><div class="title"><h3>Tren Penjualan Harian</h3><select id="range"><option value="7">7 hari</option><option value="14">14 hari</option><option value="30" selected>30 hari</option></select></div><div class="chart-wrap"><canvas id="daily"></canvas></div></div>
@@ -112,22 +144,187 @@ const rp=n=>"Rp "+Number(n||0).toLocaleString("id-ID");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const today=()=>new Date().toISOString().slice(0,10);
 const toast=s=>{let t=$("toast");if(!t)return;t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800)};
-const fmtDate=d=>new Date(d).toLocaleDateString("id-ID",{day:"2-digit",month:"2-digit",year:"numeric"});
+const monthNames=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const fmtDateFull=dStr=>{
+  if(!dStr)return "—";
+  const [y,m,d]=dStr.split("-");
+  return `${Number(d)} ${monthNames[Number(m)-1]||m} ${y}`;
+};
+const fmtMonthFull=mStr=>{
+  if(!mStr)return "—";
+  const [y,m]=mStr.split("-");
+  return `${monthNames[Number(m)-1]||m} ${y}`;
+};
 
 let sales=load(STORE.sales,[]),charts={};
+
+// Inisialisasi default filter
+$("filterDate").value=today();
+$("filterMonth").value=today().slice(0,7);
+
 function render(){
- let revenue=sales.reduce((s,x)=>s+x.total,0),units=sales.reduce((s,x)=>s+x.items.reduce((a,i)=>a+i.qty,0),0),profit=sales.reduce((s,x)=>s+x.items.reduce((a,i)=>a+(i.price-i.cost)*i.qty,0),0);
- let prod={};sales.forEach(s=>s.items.forEach(i=>{if(!prod[i.name])prod[i.name]={qty:0,revenue:0};prod[i.name].qty+=i.qty;prod[i.name].revenue+=i.total}));
- let sorted=Object.entries(prod).sort((a,b)=>b[1].qty-a[1].qty);$("revenue").textContent=rp(revenue);$("units").textContent=units;$("top").textContent=sorted[0]?.[0]||"—";$("profit").textContent=rp(profit);
- $("tops").innerHTML=sorted.slice(0,7).map(([n,v],i)=>`<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:11px"><b>${i+1}. ${esc(n)}</b><span>${v.qty} unit</span></div><div class="bar" style="margin-top:5px"><i style="width:${Math.max(5,Math.min(100,v.qty/(sorted[0]?.[1].qty||1)*100))}%"></i></div><div class="small">${rp(v.revenue)}</div></div>`).join("")||'<div class="empty">Belum ada transaksi.</div>';
- let dates={},hours=Array(24).fill(0);sales.forEach(s=>{let d=s.date.slice(0,10);dates[d]=(dates[d]||0)+s.total;hours[new Date(s.date).getHours()]+=s.total});
- let vals=Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).slice(-+$("range").value),labels=vals.map(x=>x[0].slice(5)),data=vals.map(x=>x[1]);
- if(charts.daily)charts.daily.destroy();charts.daily=new Chart($("daily"),{type:"line",data:{labels,datasets:[{label:"Omzet",data,tension:.35,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"Rp "+Number(v).toLocaleString("id-ID")}}}}});
- if(charts.hour)charts.hour.destroy();charts.hour=new Chart($("hour"),{type:"bar",data:{labels:hours.map((_,i)=>i+":00"),datasets:[{label:"Omzet",data:hours}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"Rp "+Number(v).toLocaleString("id-ID")}}}}});
- let maxDay=vals.sort((a,b)=>b[1]-a[1])[0],minDay=vals.slice().sort((a,b)=>a[1]-b[1])[0],maxHour=hours.indexOf(Math.max(...hours));
- $("insight").innerHTML=sales.length?`• Titik penjualan tertinggi pada data yang tampil: <b>${maxDay?.[0]||"—"}</b> (${rp(maxDay?.[1]||0)}).<br>• Titik terendah: <b>${minDay?.[0]||"—"}</b> (${rp(minDay?.[1]||0)}).<br>• Jam dengan omzet tertinggi: sekitar <b>${maxHour}:00</b>.<br>• Gunakan pola ini untuk menentukan waktu restok, promosi, dan persiapan stok.`:"Belum ada transaksi. Setelah transaksi selesai di Kasir, analisis akan terisi otomatis.";
+ const mode=$("periodMode").value;
+ let filteredSales=sales;
+ let periodText="Semua Waktu";
+
+ if(mode==="daily"){
+   const chosenDate=$("filterDate").value||today();
+   filteredSales=sales.filter(s=>String(s.date||"").slice(0,10)===chosenDate);
+   periodText=`Harian · ${fmtDateFull(chosenDate)}`;
+ }else if(mode==="monthly"){
+   const chosenMonth=$("filterMonth").value||today().slice(0,7);
+   filteredSales=sales.filter(s=>String(s.date||"").slice(0,7)===chosenMonth);
+   periodText=`Bulanan · ${fmtMonthFull(chosenMonth)}`;
+ }else{
+   periodText="Semua Waktu (Akumulasi Total)";
+ }
+
+ $("filterDesc").textContent=`Menampilkan data: ${periodText} (${filteredSales.length} transaksi)`;
+
+ let revenue=filteredSales.reduce((s,x)=>s+(Number(x.total)||0),0);
+ let units=filteredSales.reduce((s,x)=>s+(Array.isArray(x.items)?x.items.reduce((a,i)=>a+(Number(i.qty)||0),0):0),0);
+ let profit=filteredSales.reduce((s,x)=>s+(Array.isArray(x.items)?x.items.reduce((a,i)=>a+((Number(i.price)||0)-(Number(i.cost)||0))*(Number(i.qty)||0),0):0),0);
+
+ let prod={};
+ filteredSales.forEach(s=>{
+   if(Array.isArray(s.items)){
+     s.items.forEach(i=>{
+       if(!prod[i.name])prod[i.name]={qty:0,revenue:0};
+       prod[i.name].qty+=(Number(i.qty)||0);
+       prod[i.name].revenue+=(Number(i.total)||0);
+     });
+   }
+ });
+ let sorted=Object.entries(prod).sort((a,b)=>b[1].qty-a[1].qty);
+
+ $("revenue").textContent=rp(revenue);
+ $("units").textContent=units;
+ $("top").textContent=sorted[0]?.[0]||"—";
+ $("profit").textContent=rp(profit);
+
+ $("tops").innerHTML=sorted.length
+   ? sorted.slice(0,7).map(([n,v],i)=>`
+     <div style="margin-bottom:12px">
+       <div style="display:flex;justify-content:space-between;font-size:11px">
+         <b>${i+1}. ${esc(n)}</b>
+         <span>${v.qty} unit</span>
+       </div>
+       <div class="bar" style="margin-top:5px">
+         <i style="width:${Math.max(5,Math.min(100,v.qty/(sorted[0]?.[1].qty||1)*100))}%"></i>
+       </div>
+       <div class="small">${rp(v.revenue)}</div>
+     </div>`).join("")
+   : `<div class="empty">Belum ada transaksi pada periode ${esc(periodText)}.</div>`;
+
+ // Grafik Jam Penjualan (berdasarkan transaksi periode yang difilter)
+ let hours=Array(24).fill(0);
+ filteredSales.forEach(s=>{
+   const h=new Date(s.date).getHours();
+   if(h>=0&&h<24) hours[h]+=(Number(s.total)||0);
+ });
+ if(charts.hour)charts.hour.destroy();
+ charts.hour=new Chart($("hour"),{
+   type:"bar",
+   data:{labels:hours.map((_,i)=>i+":00"),datasets:[{label:"Omzet",data:hours,backgroundColor:"#55b94f",borderRadius:4}]},
+   options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"Rp "+Number(v).toLocaleString("id-ID")}}}}
+ });
+
+ // Grafik Tren Harian
+ let dates={};
+ if(mode==="monthly"){
+   const chosenMonth=$("filterMonth").value||today().slice(0,7);
+   filteredSales.forEach(s=>{
+     let d=String(s.date||"").slice(0,10);
+     dates[d]=(dates[d]||0)+(Number(s.total)||0);
+   });
+   const [yStr,mStr]=chosenMonth.split("-");
+   const totalDays=new Date(Number(yStr),Number(mStr),0).getDate();
+   let mLabels=[],mData=[];
+   for(let day=1;day<=totalDays;day++){
+     const dayKey=`${chosenMonth}-${String(day).padStart(2,"0")}`;
+     mLabels.push(String(day));
+     mData.push(dates[dayKey]||0);
+   }
+   if(charts.daily)charts.daily.destroy();
+   charts.daily=new Chart($("daily"),{
+     type:"line",
+     data:{labels:mLabels,datasets:[{label:"Omzet",data:mData,tension:.35,fill:true,borderColor:"#55b94f",backgroundColor:"rgba(85,185,79,0.15)"}]},
+     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"Rp "+Number(v).toLocaleString("id-ID")}}}}
+   });
+ }else{
+   sales.forEach(s=>{
+     let d=String(s.date||"").slice(0,10);
+     dates[d]=(dates[d]||0)+(Number(s.total)||0);
+   });
+   let vals=Object.entries(dates).sort((a,b)=>a[0].localeCompare(b[0])).slice(-+$("range").value);
+   let labels=vals.map(x=>x[0].slice(5));
+   let data=vals.map(x=>x[1]);
+   if(charts.daily)charts.daily.destroy();
+   charts.daily=new Chart($("daily"),{
+     type:"line",
+     data:{labels,datasets:[{label:"Omzet",data,tension:.35,fill:true,borderColor:"#55b94f",backgroundColor:"rgba(85,185,79,0.15)"}]},
+     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"Rp "+Number(v).toLocaleString("id-ID")}}}}
+   });
+ }
+
+ let maxHour=hours.indexOf(Math.max(...hours));
+ let peakHourSales=hours[maxHour]||0;
+ if(!filteredSales.length){
+   $("insight").innerHTML=`• Periode: <b>${esc(periodText)}</b><br>• Status: <i>Belum ada transaksi yang tercatat pada periode ini.</i><br>• Gunakan filter tanggal atau bulan di atas untuk melihat riwayat sebelumnya. Transaksi baru dari Kasir akan otomatis muncul di sini.`;
+ }else{
+   let insightItems=[
+     `• Periode aktif: <b>${esc(periodText)}</b> (${filteredSales.length} transaksi berhasil).`,
+     `• Total omzet: <b>${rp(revenue)}</b> dengan volume terjual <b>${units} unit</b>.`,
+     `• Estimasi laba bersih: <b>${rp(profit)}</b>.`,
+     `• Produk terlaris: <b>${sorted[0]?esc(sorted[0][0]):"—"}</b> (${sorted[0]?sorted[0][1].qty:0} unit).`
+   ];
+   if(peakHourSales>0){
+     insightItems.push(`• Jam paling ramai penjualan: sekitar <b>${maxHour}:00</b> (omzet ${rp(peakHourSales)}).`);
+   }
+   $("insight").innerHTML=insightItems.join("<br>");
+ }
 }
-$("range").onchange=render;window.addEventListener("storage",()=>{sales=load(STORE.sales,[]);render()});window.addEventListener("webpkm:data-change",()=>{sales=load(STORE.sales,[]);render()});render();
+
+$("periodMode").addEventListener("change",()=>{
+ const mode=$("periodMode").value;
+ if(mode==="daily"){
+   $("filterDayWrap").style.display="block";
+   $("filterMonthWrap").style.display="none";
+   if(!$("filterDate").value)$("filterDate").value=today();
+ }else if(mode==="monthly"){
+   $("filterDayWrap").style.display="none";
+   $("filterMonthWrap").style.display="block";
+   if(!$("filterMonth").value)$("filterMonth").value=today().slice(0,7);
+ }else{
+   $("filterDayWrap").style.display="none";
+   $("filterMonthWrap").style.display="none";
+ }
+ render();
+});
+
+$("filterDate").addEventListener("change",render);
+$("filterMonth").addEventListener("change",render);
+
+$("btnToday").addEventListener("click",()=>{
+ $("periodMode").value="daily";
+ $("filterDayWrap").style.display="block";
+ $("filterMonthWrap").style.display="none";
+ $("filterDate").value=today();
+ render();
+});
+
+$("btnThisMonth").addEventListener("click",()=>{
+ $("periodMode").value="monthly";
+ $("filterDayWrap").style.display="none";
+ $("filterMonthWrap").style.display="block";
+ $("filterMonth").value=today().slice(0,7);
+ render();
+});
+
+$("range").onchange=render;
+window.addEventListener("storage",()=>{sales=load(STORE.sales,[]);render()});
+window.addEventListener("webpkm:data-change",()=>{sales=load(STORE.sales,[]);render()});
+render();
 });
 </script><script src="shared-navbar.js"></script>
 </body></html>
