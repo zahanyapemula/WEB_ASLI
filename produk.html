@@ -72,7 +72,15 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 .owner-picker-options[hidden]{display:none}
 .owner-picker-options button{display:block;width:100%;padding:9px 10px;border:0;border-radius:7px;background:#fff;text-align:left;color:var(--dark);font:600 12px var(--font);cursor:pointer}
 .owner-picker-options button:hover,.owner-picker-options button:focus{background:var(--soft);outline:none}
-.barcode{margin-top:10px;border:1px solid var(--line);border-radius:11px;padding:7px;text-align:center;min-height:106px;display:flex;flex-direction:column;justify-content:center}.barcode svg{display:block;width:100%;height:102px;max-width:100%;margin:0 auto}.barcode svg text{fill:#111!important}.barcode svg .barcode-number{font-family:monospace!important;font-size:13px!important}.barcode svg .barcode-price{font-family:sans-serif!important;font-size:15px!important}
+.barcode{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:8px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.02)}
+.barcode svg{display:block;width:100%;height:auto;max-width:100%;margin:0 auto;border-radius:6px}
+.barcode svg text{fill:#111}
+.barcode svg .barcode-title{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-weight:700}
+.barcode svg .barcode-number{font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:2px}
+.barcode svg .barcode-price{font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:18px;font-weight:800;fill:#15351f}
+.barcode-actions{display:flex;gap:6px;margin-top:8px}
+.barcode-actions .btn{flex:1;padding:7px 8px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:4px;border:1px solid var(--line);background:var(--soft2);border-radius:9px}
+.barcode-actions .btn:hover{background:var(--soft);border-color:var(--green);color:#1b5e20}
 .code{margin-top:5px;padding:6px;border-radius:7px;background:var(--soft2);font:700 10px var(--mono);word-break:break-all}
 .actions{display:flex;gap:6px;margin-top:9px}.actions .btn{flex:1}
 .badge{display:inline-block;border-radius:99px;padding:4px 8px;font-size:9px;font-weight:800}.good{background:var(--soft);color:#31823b}.warn{background:var(--yellow2);color:#806d00}.danger-badge{background:var(--redsoft);color:#c53d38}
@@ -122,7 +130,7 @@ td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
 </div>
 <div class="feature-summary"><strong>Alur singkat:</strong> Buat produk → atur owner dan stok di Storage → jual melalui Kasir → tinjau transaksi di Buku Kas dan laporan.</div>
 </div></div>
-<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, barcode, atau nama UMKM" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan UMKM"><option value="">Semua UMKM</option></select></div><div class="small" style="margin-top:6px">Filter UMKM mencakup UMKM yang belum memiliki akun selama produknya sudah didaftarkan.</div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
+<div class="card" style="margin-top:16px"><div class="title"><h3>Daftar Produk <span id="count" class="tag">0 produk</span></h3><button id="printAllBtn" type="button" class="btn secondary" style="padding:6px 12px;font-size:11px" title="Cetak seluruh lembar barcode produk">🖨️ Cetak Semua Barcode</button></div><div class="product-filters"><input id="productSearch" type="search" placeholder="Cari nama, kode, barcode, atau nama UMKM" aria-label="Cari produk"><select id="ownerFilter" aria-label="Filter produk berdasarkan UMKM"><option value="">Semua UMKM</option></select></div><div class="small" style="margin-top:6px">Filter UMKM mencakup UMKM yang belum memiliki akun selama produknya sudah didaftarkan.</div><div id="list" class="product-grid"></div><div id="empty" class="empty">Belum ada produk.</div></div>
 
 </div><div id="toast" class="toast"></div>
 <script>
@@ -416,7 +424,7 @@ function ensureProductCodes(){
 ensureProductCodes();
 $("productCode").value=genProductCode();
 
-function renderEAN13(svg, value, price){
+function renderEAN13(svg, value, price, name){
   value=String(value||"").trim();
   if(!validEAN13(value)){ svg.innerHTML=""; return; }
   const L=["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"];
@@ -430,16 +438,146 @@ function renderEAN13(svg, value, price){
   bits += "01010";
   for(let i=7;i<=12;i++) bits += R[Number(value[i])];
   bits += "101";
-  const module=3; const quiet=12*module; const barH=54;
-  let rects=[];
-  for(let i=0;i<bits.length;i++) if(bits[i]==="1") rects.push(`<rect x="${quiet+i*module}" y="4" width="${module}" height="${barH}"/>`);
+  const module=3; const quiet=12*module; const barH=50; const barY=38;
   const total=quiet*2+bits.length*module;
-  svg.setAttribute("viewBox",`0 0 ${total} 102`);
+  const totalH=152;
+  let rects=[];
+  for(let i=0;i<bits.length;i++) if(bits[i]==="1") rects.push(`<rect x="${quiet+i*module}" y="${barY}" width="${module}" height="${barH}" fill="#111111"/>`);
+  svg.setAttribute("viewBox",`0 0 ${total} ${totalH}`);
   svg.setAttribute("preserveAspectRatio","xMidYMid meet");
-  svg.setAttribute("width","100%"); svg.setAttribute("height","102");
+  svg.setAttribute("width","100%"); svg.setAttribute("height","auto");
+  svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
+  const cleanName=String(name||"").trim()||"Produk";
+  const nameLen=cleanName.length;
+  const displayName=nameLen>34?cleanName.slice(0,32)+"…":cleanName;
+  const nameFontSize=nameLen>24?"12":"14";
   const priceLabel=`Rp ${Number(price||0).toLocaleString("id-ID")}`;
-  svg.setAttribute("role","img"); svg.setAttribute("aria-label",`EAN-13 ${value}, harga ${priceLabel}`);
-  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="102" fill="#fff"/><g fill="#111">${rects.join("")}</g><text class="barcode-number" x="${total/2}" y="76" text-anchor="middle" font-weight="700">${value}</text><text class="barcode-price" x="${total/2}" y="99" text-anchor="middle" font-weight="700">${priceLabel}</text>`;
+  svg.setAttribute("role","img"); svg.setAttribute("aria-label",`Barcode ${cleanName}, kode ${value}, harga ${priceLabel}`);
+  svg.innerHTML=`<rect x="0" y="0" width="${total}" height="${totalH}" fill="#ffffff" rx="6"/><text class="barcode-title" x="${total/2}" y="24" text-anchor="middle" font-family="'Plus Jakarta Sans',system-ui,-apple-system,sans-serif" font-size="${nameFontSize}" font-weight="700" fill="#111827">${esc(displayName)}</text><g fill="#111111">${rects.join("")}</g><text class="barcode-number" x="${total/2}" y="104" text-anchor="middle" font-family="'JetBrains Mono','Courier New',monospace" font-size="13" font-weight="700" letter-spacing="2.5" fill="#374151">${value}</text><text class="barcode-price" x="${total/2}" y="134" text-anchor="middle" font-family="'Plus Jakarta Sans',system-ui,-apple-system,sans-serif" font-size="18" font-weight="800" fill="#15351f">${priceLabel}</text>`;
+}
+
+function downloadBarcodePNG(svgElement, productName, barcode){
+  if(!svgElement)return;
+  const cleanName=String(productName||'barcode').toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'')||'produk';
+  const filename=`barcode-${cleanName}-${barcode}.png`;
+  const clone=svgElement.cloneNode(true);
+  clone.setAttribute("xmlns","http://www.w3.org/2000/svg");
+  const width=357, height=152;
+  clone.setAttribute("width",width);
+  clone.setAttribute("height",height);
+  const svgData=new XMLSerializer().serializeToString(clone);
+  const svgBlob=new Blob([svgData],{type:"image/svg+xml;charset=utf-8"});
+  const URLObj=window.URL||window.webkitURL||window;
+  const blobURL=URLObj.createObjectURL(svgBlob);
+  const img=new Image();
+  img.onload=()=>{
+    try{
+      const scale=3;
+      const canvas=document.createElement("canvas");
+      canvas.width=width*scale;
+      canvas.height=height*scale;
+      const ctx=canvas.getContext("2d");
+      ctx.fillStyle="#ffffff";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      URLObj.revokeObjectURL(blobURL);
+      canvas.toBlob(blob=>{
+        if(!blob){ fallbackDownloadSVG(svgData,filename.replace(/\.png$/,".svg")); return; }
+        const a=document.createElement("a");
+        a.download=filename;
+        a.href=URLObj.createObjectURL(blob);
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(()=>{URLObj.revokeObjectURL(a.href);a.remove();},150);
+        toast(`Barcode ${cleanName} berhasil diunduh (PNG)`);
+      },"image/png");
+    }catch(err){
+      console.error("Canvas export failed:",err);
+      fallbackDownloadSVG(svgData,filename.replace(/\.png$/,".svg"));
+    }
+  };
+  img.onerror=()=>{
+    URLObj.revokeObjectURL(blobURL);
+    fallbackDownloadSVG(svgData,filename.replace(/\.png$/,".svg"));
+  };
+  img.src=blobURL;
+}
+
+function fallbackDownloadSVG(svgString, filename){
+  const blob=new Blob([svgString],{type:"image/svg+xml;charset=utf-8"});
+  const URLObj=window.URL||window.webkitURL||window;
+  const a=document.createElement("a");
+  a.download=filename;
+  a.href=URLObj.createObjectURL(blob);
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URLObj.revokeObjectURL(a.href);a.remove();},150);
+  toast("Barcode berhasil diunduh (SVG)");
+}
+
+function printBarcodeLabel(svgElement, productName, barcode, price){
+  if(!svgElement)return;
+  const printWin=window.open("","_blank","width=680,height=600");
+  if(!printWin){
+    toast("Pop-up diblokir browser. Izinkan pop-up untuk mencetak langsung.");
+    return;
+  }
+  const svgHtml=svgElement.outerHTML;
+  printWin.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Cetak Barcode - ${esc(productName)}</title><style>
+  @page{margin:6mm;size:auto}
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;background:#f4f6f5;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+  .print-sheet{background:#fff;border:1px dashed #c0d0c3;border-radius:12px;padding:20px;max-width:360px;width:100%;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  .print-sheet svg{width:100%;height:auto;display:block;margin:0 auto}
+  .controls{margin-top:18px;display:flex;gap:10px}
+  .btn{padding:10px 18px;font-weight:700;font-size:13px;border-radius:8px;border:0;cursor:pointer}
+  .btn-print{background:#328f46;color:#fff}
+  .btn-close{background:#e2e8e3;color:#333}
+  .hint{margin-top:12px;font-size:11px;color:#666}
+  @media print{
+    body{background:#fff;padding:0;min-height:auto;display:block}
+    .controls,.hint{display:none!important}
+    .print-sheet{border:none;border-radius:0;box-shadow:none;padding:0;max-width:340px;margin:0 auto}
+  }
+  </style></head><body><div class="print-sheet">${svgHtml}</div><div class="controls"><button class="btn btn-print" onclick="window.print()">🖨️ Cetak Sekarang</button><button class="btn btn-close" onclick="window.close()">Tutup</button></div><div class="hint">💡 Jendela cetak otomatis terbuka. Anda juga bisa menekan tombol di atas.</div><script>window.addEventListener('load',()=>{setTimeout(()=>{window.print();},350);});<\/script></body></html>`);
+  printWin.document.close();
+}
+
+function printAllBarcodes(productsList){
+  if(!productsList||!productsList.length){
+    toast("Tidak ada barcode produk untuk dicetak.");
+    return;
+  }
+  const printWin=window.open("","_blank","width=850,height=750");
+  if(!printWin){
+    toast("Pop-up diblokir. Izinkan pop-up untuk mencetak.");
+    return;
+  }
+  const cardsHtml=productsList.map(p=>{
+    const tempSvg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+    renderEAN13(tempSvg,String(p.barcode),p.price,p.name);
+    return `<div class="barcode-sticker">${tempSvg.outerHTML}</div>`;
+  }).join("");
+  printWin.document.write(`<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Cetak Lembar Barcode (${productsList.length} Produk)</title><style>
+  @page{margin:8mm;size:A4 portrait}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;font-family:system-ui,-apple-system,sans-serif;background:#f4f6f5}
+  .header-bar{margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;background:#fff;padding:12px 18px;border-radius:10px;border:1px solid #dcebdd}
+  .header-bar h2{margin:0;font-size:16px}
+  .btn{padding:9px 16px;font-weight:700;font-size:13px;border-radius:8px;border:0;cursor:pointer}
+  .btn-print{background:#328f46;color:#fff}
+  .sticker-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .barcode-sticker{background:#fff;border:1px dashed #c0d0c3;border-radius:8px;padding:10px;page-break-inside:avoid}
+  .barcode-sticker svg{width:100%;height:auto;display:block}
+  @media print{
+    body{background:#fff;padding:0}
+    .header-bar{display:none!important}
+    .sticker-grid{grid-template-columns:repeat(2,1fr);gap:8mm}
+    .barcode-sticker{border:1px dashed #bbb;padding:6px}
+  }
+  </style></head><body><div class="header-bar"><h2>Daftar Label Barcode (${productsList.length} Produk)</h2><button class="btn btn-print" onclick="window.print()">🖨️ Cetak Semua</button></div><div class="sticker-grid">${cardsHtml}</div><script>window.addEventListener('load',()=>{setTimeout(()=>{window.print();},400);});<\/script></body></html>`);
+  printWin.document.close();
 }
 
 async function addProduct(){
@@ -528,62 +666,71 @@ function rebuildOwnerFilter(){
  ownerNames.forEach(owner=>ownerFilter.add(new Option(owner,owner)));
  ownerFilter.value=ownerNames.includes(selectedOwner)?selectedOwner:"";
 }
-let _lastProdukRenderHash = '';
-function render(){
- rebuildOwnerFilter();
- const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
- const selectedOwner=$("ownerFilter").value;
- const filteredProducts=products.filter(product=>{
-  const searchable=[product.name,product.code,product.productCode,product.barcode,product.owner,product.ownerCode]
-   .some(value=>String(value||"").toLocaleLowerCase("id-ID").includes(query));
-  const owner=String(product.owner||"").trim()||"Belum diatur";
-  return searchable&&(!selectedOwner||owner===selectedOwner);
- });
- filteredProducts.sort((a,b)=>{
-  const codeA=String(a.ownerCode||"~~~~");
-  const codeB=String(b.ownerCode||"~~~~");
-  if(codeA!==codeB)return codeA.localeCompare(codeB);
-  return String(a.name||"").localeCompare(String(b.name||""),"id");
- });
- const currentRenderHash = `${query}|${selectedOwner}|${filteredProducts.map(p => `${p.id}:${p.stock}:${p.price}:${p.cost}:${p.barcode}:${p.owner}:${p.ownerCode}`).join(';')}`;
- if (currentRenderHash === _lastProdukRenderHash) {
-  return;
- }
- _lastProdukRenderHash = currentRenderHash;
+ let currentFilteredProducts = [];
+ let _lastProdukRenderHash = '';
+ function render(){
+  rebuildOwnerFilter();
+  const query=$("productSearch").value.trim().toLocaleLowerCase("id-ID");
+  const selectedOwner=$("ownerFilter").value;
+  const filteredProducts=products.filter(product=>{
+   const searchable=[product.name,product.code,product.productCode,product.barcode,product.owner,product.ownerCode]
+    .some(value=>String(value||"").toLocaleLowerCase("id-ID").includes(query));
+   const owner=String(product.owner||"").trim()||"Belum diatur";
+   return searchable&&(!selectedOwner||owner===selectedOwner);
+  });
+  filteredProducts.sort((a,b)=>{
+   const codeA=String(a.ownerCode||"~~~~");
+   const codeB=String(b.ownerCode||"~~~~");
+   if(codeA!==codeB)return codeA.localeCompare(codeB);
+   return String(a.name||"").localeCompare(String(b.name||""),"id");
+  });
+  currentFilteredProducts = filteredProducts;
+  const currentRenderHash = `${query}|${selectedOwner}|${filteredProducts.map(p => `${p.id}:${p.name}:${p.stock}:${p.price}:${p.cost}:${p.barcode}:${p.owner}:${p.ownerCode}`).join(';')}`;
+  if (currentRenderHash === _lastProdukRenderHash) {
+   return;
+  }
+  _lastProdukRenderHash = currentRenderHash;
 
- $("count").textContent=filteredProducts.length+" dari "+products.length+" produk";
- $("empty").textContent=products.length?"Produk tidak ditemukan.":"Belum ada produk.";
- $("empty").style.display=filteredProducts.length?"none":"block";
- $("list").innerHTML="";
- filteredProducts.forEach(p=>{
-  let d=document.createElement("div");d.className="product";
-  d.innerHTML=`<h4>${esc(p.name)}</h4><div class="price">${rp(p.price)} · HPP ${rp(p.cost)}</div>
-  <div class="small" style="margin-top:7px">Kode Produk: <strong>${esc(p.code || p.productCode || p.barcode)}</strong></div>
-  <div class="barcode"><svg></svg><div class="code">${esc(p.barcode)}</div></div>
-  <div class="small" style="margin-top:7px">Stok: ${p.stock||0} · UMKM: ${esc(p.ownerCode||"----")} · Pemilik: ${esc(p.owner||"Belum diatur")}</div>
-  <div class="actions"><button class="btn secondary edit">⚙️ Storage</button><button class="btn secondary copy">📋 Salin</button><button class="btn danger del">🗑️ Hapus</button></div>`;
-  $("list").appendChild(d);
-  const svg=d.querySelector("svg");
-  renderEAN13(svg,String(p.barcode),p.price);
-  d.querySelector(".edit").onclick=()=>location.href="storage.html?product="+encodeURIComponent(p.id);
-  d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
-  d.querySelector(".del").onclick=async()=>{
-   if(confirm("Hapus "+p.name+"?")){
-    try{
-     products = await KasirAuth.deleteProduct(p.id);
-    }catch(err){
-     products = products.filter(x=>x.id!==p.id);
-     save(STORE.products,products);
+  $("count").textContent=filteredProducts.length+" dari "+products.length+" produk";
+  $("empty").textContent=products.length?"Produk tidak ditemukan.":"Belum ada produk.";
+  $("empty").style.display=filteredProducts.length?"none":"block";
+  $("list").innerHTML="";
+  filteredProducts.forEach(p=>{
+   let d=document.createElement("div");d.className="product";
+   d.innerHTML=`<h4>${esc(p.name)}</h4><div class="price">${rp(p.price)} · HPP ${rp(p.cost)}</div>
+   <div class="small" style="margin-top:7px">Kode Produk: <strong>${esc(p.code || p.productCode || p.barcode)}</strong></div>
+   <div class="barcode"><svg></svg></div>
+   <div class="barcode-actions">
+     <button type="button" class="btn secondary btn-download" title="Unduh gambar barcode PNG untuk dicetak">📥 Unduh Barcode</button>
+     <button type="button" class="btn secondary btn-print" title="Cetak label barcode langsung">🖨️ Cetak</button>
+   </div>
+   <div class="small" style="margin-top:7px">Stok: ${p.stock||0} · UMKM: ${esc(p.ownerCode||"----")} · Pemilik: ${esc(p.owner||"Belum diatur")}</div>
+   <div class="actions"><button class="btn secondary edit">⚙️ Storage</button><button class="btn secondary copy">📋 Salin</button><button class="btn danger del">🗑️ Hapus</button></div>`;
+   $("list").appendChild(d);
+   const svg=d.querySelector(".barcode svg");
+   renderEAN13(svg,String(p.barcode),p.price,p.name);
+   d.querySelector(".btn-download").onclick=()=>downloadBarcodePNG(svg,p.name,p.barcode);
+   d.querySelector(".btn-print").onclick=()=>printBarcodeLabel(svg,p.name,p.barcode,p.price);
+   d.querySelector(".edit").onclick=()=>location.href="storage.html?product="+encodeURIComponent(p.id);
+   d.querySelector(".copy").onclick=async()=>{try{await navigator.clipboard.writeText(p.barcode)}catch(e){}toast("Barcode disalin")};
+   d.querySelector(".del").onclick=async()=>{
+    if(confirm("Hapus "+p.name+"?")){
+     try{
+      products = await KasirAuth.deleteProduct(p.id);
+     }catch(err){
+      products = products.filter(x=>x.id!==p.id);
+      save(STORE.products,products);
+     }
+     _lastProdukRenderHash = '';
+     render();
     }
-    _lastProdukRenderHash = '';
-    render();
-   }
-  };
- });
-}
-$("productSearch").addEventListener("input",render);
-$("ownerFilter").addEventListener("change",render);
-render();
+   };
+  });
+ }
+ $("productSearch").addEventListener("input",render);
+ $("ownerFilter").addEventListener("change",render);
+ $("printAllBtn")?.addEventListener("click",()=>printAllBarcodes(currentFilteredProducts));
+ render();
 }).catch(error=>{
  console.error("Halaman produk gagal diinisialisasi:",error);
  const notice=document.createElement("div");
